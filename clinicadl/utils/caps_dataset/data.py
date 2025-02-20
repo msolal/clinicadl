@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torchvision.transforms as transforms
+from torchio.transforms.augmentation.intensity import RandomBlur, RandomNoise, RandomGamma
 from clinica.utils.exceptions import ClinicaCAPSError
 from torch.utils.data import Dataset
 
@@ -1009,7 +1010,12 @@ def get_transforms(
         "Erasing": transforms.RandomErasing(),
         "CropPad": RandomCropPad(10),
         "Smoothing": RandomSmoothing(),
-        "None": None,
+        # "None": None,
+        # torchio.transforms 
+        "None": RandomNoise(p=0), #trick to have no transformation
+        "RandomNoise": RandomNoise(std=0.01),
+        "RandomBlur": RandomBlur(std=0.01),
+        "RandomGamma": RandomGamma(log_gamma=(-0.01, 0.01)),
     }
 
     augmentation_list = []
@@ -1121,7 +1127,7 @@ def load_data_test_single(test_path: Path, diagnoses_list, baseline=True):
         else:
             test_path = test_path.parent / "train_baseline.tsv"
     else:
-        if not (test_path.parent / "train.tsv").is_file():
+        if not (test_path / "train.tsv").is_file():
             if not (test_path.parent / "labels.tsv").is_file():
                 raise ClinicaDLTSVError(
                     f"There is no train.tsv or labels.tsv in your folder {test_path.parent} "
@@ -1129,7 +1135,7 @@ def load_data_test_single(test_path: Path, diagnoses_list, baseline=True):
             else:
                 test_path = test_path.parent / "labels.tsv"
         else:
-            test_path = test_path.parent / "train.tsv"
+            test_path = test_path / "train.tsv"
 
     test_df = pd.read_csv(test_path, sep="\t")
 

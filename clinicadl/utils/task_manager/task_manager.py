@@ -231,7 +231,7 @@ class TaskManager:
                     if save_reconstruction_nifti:
                         reconstruction = outputs["recon_x"][idx].squeeze(0).cpu()
                         input_nii = nib.Nifti1Image(image[0].numpy(), eye(4))
-                        output_nii = nib.Nifti1Image(reconstruction[0].numpy(), eye(4))
+                        output_nii = nib.Nifti1Image(reconstruction.numpy(), eye(4))
                         # Create file name according to participant and session id
                         input_filename = f"{participant_id}_{session_id}_image_input.nii.gz"
                         output_filename = f"{participant_id}_{session_id}_image_output.nii.gz"

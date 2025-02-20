@@ -148,7 +148,7 @@ class Encoder_Decoder():
         if self.feature_size == 0:
             feature_space = n_pix_encoder
         else:
-            feature_space = feature_size
+            feature_space = self.feature_size
             encoder_layers.append(
                 nn.Sequential(nn.Linear(n_pix_encoder, feature_space), nn.ReLU())
             )
