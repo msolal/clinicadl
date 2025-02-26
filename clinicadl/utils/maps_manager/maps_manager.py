@@ -264,6 +264,7 @@ class MapsManager:
         save_nifti: bool = False,
         save_latent_tensor: bool = False,
         pythae: bool = False,
+        sim_hypo: Tuple[str, str, int] = None,
     ):
         """
         Performs the prediction task on a subset of caps_directory defined in a TSV file.
@@ -298,7 +299,9 @@ class MapsManager:
             data_augmentation=self.data_augmentation,
             size_reduction=self.size_reduction,
             size_reduction_factor=self.size_reduction_factor,
+            sim_hypo=sim_hypo,
         )
+            
 
         if pythae:
             from clinicadl.utils.network.pythae.encoder_decoder_config import make_encoder_decoder_config

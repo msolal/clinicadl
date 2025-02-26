@@ -78,6 +78,12 @@ from pathlib import Path
     is_flag=True,
     help="""Save the latent representation of the image.""",
 )
+@click.option(
+    "--sim_hypo", 
+    type=(str, str, int),
+    default=None,
+    help="""To simulate hypometabolism on FDG PET (path, pathology, percentage).""",
+)
 @cli_param.option.split
 @cli_param.option.selection_metrics
 @cli_param.option.use_gpu
@@ -102,6 +108,7 @@ def cli(
     save_tensor,
     save_nifti,
     save_latent_tensor,
+    sim_hypo,
 ):
     """Infer the outputs of a trained model on a test set.
     INPUT_MAPS_DIRECTORY is the MAPS folder from where the model used for prediction will be loaded.
@@ -132,4 +139,5 @@ def cli(
         save_tensor=save_tensor,
         save_nifti=save_nifti,
         save_latent_tensor=save_latent_tensor,
+        sim_hypo=sim_hypo,
     )

@@ -1,5 +1,5 @@
 # coding: utf8
-from typing import List
+from typing import List, Tuple
 from pathlib import Path
 
 from clinicadl import MapsManager
@@ -24,6 +24,7 @@ def predict(
     save_tensor: bool = False,
     save_nifti: bool = False,
     save_latent_tensor: bool = False,
+    sim_hypo: Tuple[str, str, int] = None,
 ):
     """
     This function loads a MAPS and predicts the global metrics and individual values
@@ -45,6 +46,7 @@ def predict(
         overwrite: If True former definition of data group is erased
         save_tensor: For reconstruction task only, if True it will save the reconstruction as .pt file in the MAPS.
         save_nifti: For reconstruction task only, if True it will save the reconstruction as NIfTI file in the MAPS.
+        sim_hypo: To simulate hypometabolism on FDG PET (path, pathology, percentage).
     """
     verbose_list = ["warning", "info", "debug"]
 
@@ -78,5 +80,6 @@ def predict(
         save_tensor=save_tensor,
         save_nifti=save_nifti,
         save_latent_tensor=save_latent_tensor,
-        pythae=pythae
+        pythae=pythae, 
+        sim_hypo=sim_hypo,
     )
