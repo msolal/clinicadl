@@ -47,7 +47,7 @@ class ReconstructionManager(TaskManager):
             y_pred = outputs[idx].cpu()
             metrics_gt = self.metrics_module.apply(y, y_pred)
             for metric in self.evaluation_metrics:
-                row.append(metrics_gt[metric+"_gt"])    
+                row.append(metrics_gt[metric])  
         
         return [row]
 

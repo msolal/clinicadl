@@ -200,15 +200,21 @@ class TaskManager:
         model.eval()
         dataloader.dataset.eval()
 
-        results_df = pd.DataFrame(columns=self.columns)
+        columns_hypo = self.columns.copy()
+        if sim_hypo: 
+            for metric in self.evaluation_metrics:
+                columns_hypo.append(metric+"_gt")
+
+        results_df = pd.DataFrame(columns=self.columns if not sim_hypo else columns_hypo)
+
         with torch.no_grad():
             for data in dataloader:
                 outputs = model.predict(data)
 
                 # Generate detailed DataFrame
                 for idx in range(len(data["participant_id"])):
-                    row = self.generate_test_row(idx, data, outputs["recon_x"], sim_hypo=sim_hypo
-                    row_df = pd.DataFrame(row, columns=self.columns)
+                    row = self.generate_test_row(idx, data, outputs["recon_x"], sim_hypo=sim_hypo)
+                    row_df = pd.DataFrame(row, columns=self.columns if not sim_hypo else columns_hypo)
                     results_df = pd.concat([results_df, row_df])
                     
                     image = data["data"][idx]

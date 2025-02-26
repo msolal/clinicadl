@@ -55,6 +55,7 @@ class CapsDataset(Dataset):
         label_code: Dict[Any, int] = None,
         augmentation_transformations: Optional[Callable] = None,
         multi_cohort: bool = False,
+        sim_hypo: bool = False,
     ):
         self.caps_directory = caps_directory
         self.caps_dict = self.create_caps_dict(caps_directory, multi_cohort)
@@ -65,6 +66,7 @@ class CapsDataset(Dataset):
         self.label = label
         self.label_code = label_code
         self.preprocessing_dict = preprocessing_dict
+        self.sim_hypo = sim_hypo
 
         if not hasattr(self, "elem_index"):
             raise AttributeError(
@@ -322,8 +324,8 @@ class CapsDatasetImage(CapsDataset):
             label_code=label_code,
             transformations=all_transformations,
             multi_cohort=multi_cohort,
+            sim_hypo=sim_hypo,
         )
-        self.sim_hypo = sim_hypo
 
     @property
     def elem_index(self):
@@ -336,8 +338,9 @@ class CapsDatasetImage(CapsDataset):
         image = torch.load(image_path)
         
         if self.sim_hypo: 
-            if len(self.transformations) > 1:
-                label = self.transformations[1:](image)
+            if len(self.transformations.transforms) > 1:
+                label_transformations = transforms.Compose(self.transformations.transforms[1:])
+                label = label_transformations(image)
             else: 
                 label = image
 
@@ -387,6 +390,7 @@ class PythaeCAPS(CapsDatasetImage):
         X = super().__getitem__(index)
         return DatasetOutput(
             data=X['data'],
+            label=X['label'],
             participant_id=X['participant_id'],
             session_id=X['session_id'],
             image_id=X['image_id'],
