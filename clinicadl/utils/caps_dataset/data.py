@@ -295,6 +295,7 @@ class CapsDatasetImage(CapsDataset):
         label_code: Dict[str, int] = None,
         all_transformations: Optional[Callable] = None,
         multi_cohort: bool = False,
+        sim_hypo: bool = False,
     ):
         """
         Args:
@@ -322,6 +323,7 @@ class CapsDatasetImage(CapsDataset):
             transformations=all_transformations,
             multi_cohort=multi_cohort,
         )
+        self.sim_hypo = sim_hypo
 
     @property
     def elem_index(self):
@@ -332,6 +334,12 @@ class CapsDatasetImage(CapsDataset):
 
         image_path = self._get_image_path(participant, session, cohort)
         image = torch.load(image_path)
+        
+        if self.sim_hypo: 
+            if len(self.transformations) > 1:
+                label = self.transformations[1:](image)
+            else: 
+                label = image
 
         if self.transformations:
             image = self.transformations(image)
@@ -363,6 +371,7 @@ class PythaeCAPS(CapsDatasetImage):
         preprocessing_dict,
         train_transformations,
         all_transformations,
+        sim_hypo,
     ):
         super().__init__(
             caps_directory,
@@ -371,6 +380,7 @@ class PythaeCAPS(CapsDatasetImage):
             train_transformations=train_transformations,
             label_presence=False,
             all_transformations=all_transformations,
+            sim_hypo=sim_hypo,
         )
     
     def __getitem__(self, index):
@@ -771,6 +781,7 @@ def return_dataset(
     label_presence: bool = True,
     multi_cohort: bool = False,
     for_pythae: bool = False,
+    sim_hypo: bool = False,
 ) -> CapsDataset:
     """
     Return appropriate Dataset according to given options.
@@ -802,6 +813,7 @@ def return_dataset(
             preprocessing_dict,
             train_transformations=train_transformations,
             all_transformations=all_transformations,
+            sim_hypo=sim_hypo,
         )
 
     else:

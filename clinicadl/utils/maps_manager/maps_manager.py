@@ -411,6 +411,7 @@ class MapsManager:
                     if label_code == "default"
                     else label_code,
                     for_pythae=pythae,
+                    sim_hypo=sim_hypo is not None,
                 )
 
                 test_loader = DataLoader(
@@ -433,6 +434,7 @@ class MapsManager:
                     save_reconstruction_tensor=save_tensor,
                     save_reconstruction_nifti=save_nifti,
                     save_latent_tensor=save_latent_tensor,
+                    sim_hypo=sim_hypo is not None,
                 )
                 if not pythae: 
                     if save_tensor or save_nifti or save_latent_tensor:
@@ -1030,6 +1032,7 @@ class MapsManager:
         save_reconstruction_tensor=False,
         save_reconstruction_nifti=False,
         save_latent_tensor=False,
+        sim_hypo=False,
     ):
         """
         Launches the testing task on a dataset wrapped by a DataLoader and writes prediction TSV files.
@@ -1113,6 +1116,7 @@ class MapsManager:
                     tensor_path=tensor_path,
                     nifti_path=nifti_path,
                     latent_tensor_path=latent_tensor_path,
+                    sim_hypo=sim_hypo,
                 )
             else:
                 prediction_df, metrics = self.task_manager.test(

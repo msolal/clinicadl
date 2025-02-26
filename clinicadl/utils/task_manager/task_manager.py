@@ -178,11 +178,13 @@ class TaskManager:
         tensor_path=None, 
         nifti_path=None,
         latent_tensor_path=None,
+        sim_hypo=False,
     ) -> Tuple[pd.DataFrame, Dict[str, float]]:
         """
         Computes the predictions and evaluation metrics.
 
-        Args:
+        Ar
+        s:
             model: the model trained.
             dataloader: wrapper of a CapsDataset.
             criterion: function to calculate the loss.
@@ -205,7 +207,7 @@ class TaskManager:
 
                 # Generate detailed DataFrame
                 for idx in range(len(data["participant_id"])):
-                    row = self.generate_test_row(idx, data, outputs["recon_x"])
+                    row = self.generate_test_row(idx, data, outputs["recon_x"], sim_hypo=sim_hypo
                     row_df = pd.DataFrame(row, columns=self.columns)
                     results_df = pd.concat([results_df, row_df])
                     

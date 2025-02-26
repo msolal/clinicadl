@@ -27,7 +27,7 @@ class ReconstructionManager(TaskManager):
     def save_outputs(self):
         return True
 
-    def generate_test_row(self, idx, data, outputs):
+    def generate_test_row(self, idx, data, outputs, sim_hypo=False):
         try:
             y = data["data"][idx]
         except:
@@ -41,13 +41,25 @@ class ReconstructionManager(TaskManager):
         ]
         for metric in self.evaluation_metrics:
             row.append(metrics[metric])
+        
+        if sim_hypo: 
+            y = data["label"][idx]
+            y_pred = outputs[idx].cpu()
+            metrics_gt = self.metrics_module.apply(y, y_pred)
+            for metric in self.evaluation_metrics:
+                row.append(metrics_gt[metric+"_gt"])    
+        
         return [row]
 
-    def compute_metrics(self, results_df):
+    def compute_metrics(self, results_df, sim_hypo=False):
         metrics = dict()
         for metric in self.evaluation_metrics:
             metrics[metric] = results_df[metric].mean()
+        if sim_hypo: 
+            for metric in self.evaluation_metrics:
+                metrics[metric+"_gt"] = results_df[metric+"_gt"].mean()
         return metrics
+    
         #return results_df.describe()
 
     @staticmethod
