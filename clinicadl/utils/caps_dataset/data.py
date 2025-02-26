@@ -1028,9 +1028,9 @@ def get_transforms(
         )
 
     if sim_hypo is not None: 
-        mask_path, pathology, percentage = sim_hypo
+        hypo_mask_path, pathology, percentage = sim_hypo
         transformations_list.append(
-            SimulateHypometabolic(mask_path, pathology, percentage)
+            SimulateHypometabolic(hypo_mask_path=hypo_mask_path, pathology=pathology, percentage=percentage)
         )
         
     transformations_list.append(NanRemoval())
@@ -1180,7 +1180,7 @@ class SimulateHypometabolic(torch.nn.Module):
         self.percentage = percentage
         self.sigma = sigma
 
-        mask_path = Path(hypo_mask_path) / f"mask_hypo_{self.pathology.lower()}_resampled.nii"
+        mask_path = f"{hypo_mask_path}/mask_hypo_{self.pathology.lower()}_resampled.nii"
         mask_nii = nib.load(mask_path)
         self.mask = self.mask_processing(
             mask_nii.get_fdata()
