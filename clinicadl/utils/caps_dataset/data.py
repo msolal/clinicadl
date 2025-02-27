@@ -374,7 +374,7 @@ class PythaeCAPS(CapsDatasetImage):
         preprocessing_dict,
         train_transformations,
         all_transformations,
-        sim_hypo,
+        sim_hypo=False,
     ):
         super().__init__(
             caps_directory,
