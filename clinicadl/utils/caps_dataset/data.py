@@ -10,7 +10,8 @@ import numpy as np
 import pandas as pd
 import torch
 import torchvision.transforms as transforms
-from torchio.transforms.augmentation.intensity import RandomBlur, RandomNoise, RandomGamma
+from torchio.transforms import Resize
+from torchio.transforms.augmentation.intensity import RandomBlur, RandomNoise
 from clinica.utils.exceptions import ClinicaCAPSError
 from torch.utils.data import Dataset
 
@@ -29,6 +30,7 @@ from clinicadl.extract.extract_utils import (
 )
 from clinicadl.utils.exceptions import (
     ClinicaDLArgumentError,
+    ClinicaDLCAPSError,
     ClinicaDLConfigurationError,
     ClinicaDLTSVError,
 )

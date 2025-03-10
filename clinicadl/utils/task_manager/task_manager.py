@@ -11,6 +11,8 @@ from clinicadl.utils.caps_dataset.data import CapsDataset
 from clinicadl.utils.metric_module import MetricModule
 from clinicadl.utils.network.network import Network
 
+from os import makedirs, path
+
 
 # TODO: add function to check that the output size of the network corresponds to what is expected to
 # perform the task
@@ -21,7 +23,7 @@ class TaskManager:
 
     @property
     @abstractmethod
-    def columns(self):
+    def columns(self, **kwargs):
         """
         List of the columns' names in the TSV file containing the predictions.
         """
@@ -175,9 +177,11 @@ class TaskManager:
         save_reconstruction_tensor=False,
         save_reconstruction_nifti=False,
         save_latent_tensor=False,
-        tensor_path=None, 
+        tensor_path=None,
         nifti_path=None,
         latent_tensor_path=None,
+        sample_latent=0,
+        seed=None,
         sim_hypo=False,
     ) -> Tuple[pd.DataFrame, Dict[str, float]]:
         """
@@ -194,12 +198,16 @@ class TaskManager:
             the results and metrics on the image level.
         """
         import nibabel as nib
+        import numpy as np
         from numpy import eye
         from os import path
         
         model.eval()
         dataloader.dataset.eval()
 
+        results_df = pd.DataFrame(columns=self.columns)
+        sample_latent_results_df = None
+        
         columns_hypo = self.columns.copy()
         if sim_hypo: 
             for metric in self.evaluation_metrics:
@@ -210,8 +218,9 @@ class TaskManager:
 
         with torch.no_grad():
             for data in dataloader:
+                
                 outputs = model.predict(data)
-
+                
                 # Generate detailed DataFrame
                 for idx in range(len(data["participant_id"])):
                     row = self.generate_test_row(idx, data, outputs["recon_x"], sim_hypo=sim_hypo)
@@ -230,11 +239,11 @@ class TaskManager:
                         input_filename = (
                             f"{participant_id}_{session_id}_{self.mode}-{mode_id}_input.pt"
                         )
-                        output_filename = (
+                        output_nii_filename = (
                             f"{participant_id}_{session_id}_{self.mode}-{mode_id}_output.pt"
                         )
                         torch.save(image, path.join(tensor_path, input_filename))
-                        torch.save(reconstruction, path.join(tensor_path, output_filename))
+                        torch.save(reconstruction, path.join(tensor_path, output_nii_filename))
                     
                     # Save reconstruction nifti
                     if save_reconstruction_nifti:
@@ -244,22 +253,58 @@ class TaskManager:
                         sim_nii = nib.Nifti1Image(label.numpy(), eye(4))
                         output_nii = nib.Nifti1Image(reconstruction.numpy(), eye(4))
                         # Create file name according to participant and session id
-                        input_filename = f"{participant_id}_{session_id}_image_input.nii.gz"
+                        input_filename = f"{participant_id}_{session_id}_image_input.nii.gz"             
                         sim_filename = f"{participant_id}_{session_id}_image_sim.nii.gz"
                         output_filename = f"{participant_id}_{session_id}_image_output.nii.gz"
                         nib.save(input_nii, path.join(nifti_path, input_filename))
-                        nib.save(output_nii, path.join(nifti_path, sim_filename))
+                        nib.save(sim_nii, path.join(nifti_path, sim_filename))
                         nib.save(output_nii, path.join(nifti_path, output_filename))
-                    
+              
                     # Save latent tensor
                     if save_latent_tensor:
                         latent = outputs["embedding"][idx].squeeze(0).cpu()
-                        output_filename = (
+                        latent_pt_filename = (
                             f"{participant_id}_{session_id}_{self.mode}-{mode_id}_latent.pt"
                         )
-                        torch.save(latent, path.join(latent_tensor_path, output_filename))
+                        torch.save(latent, path.join(latent_tensor_path, latent_pt_filename))         
+                        
+                    if sample_latent > 0: 
+                        
+                        sample_latent_results_df = pd.DataFrame(columns=self.columns[:3]+["sample_latent_idx"]+self.columns[3:])
+                        sample_latent_outputs = model.predict(data, sample_latent=sample_latent, seed=seed)
 
+                        for i in range(sample_latent):
+                            
+                            output = sample_latent_outputs[i]
+                            reconstruction = output["recon_x"][0].squeeze(0).cpu()
+
+                            if save_reconstruction_tensor:
+                                output_pt_filename = (
+                                    f"{participant_id}_{session_id}_{self.mode}-{mode_id}_output-{i}.pt"
+                                )
+                                torch.save(reconstruction, path.join(tensor_path, output_pt_filename))
+                            
+                            if save_reconstruction_nifti:
+                                output_nii = nib.Nifti1Image(reconstruction.detach().numpy(), eye(4))
+                                # Create file name according to participant and session id
+                                output_nii_filename = f"{participant_id}_{session_id}_image_output-{i}.nii.gz"
+                                nib.save(output_nii, path.join(nifti_path, output_nii_filename))
+                                
+                            if save_latent_tensor:
+                                latent = output["embedding"].squeeze(0).cpu()
+                                latent_filename = (
+                                    f"{participant_id}_{session_id}_{self.mode}-{mode_id}_latent-{i}.pt"
+                                )
+                                torch.save(latent, path.join(latent_tensor_path, latent_filename))
+
+                            row = self.generate_test_row_sample_latent(idx, i, data, output["recon_x"])
+                            row_df = pd.DataFrame(row, columns=sample_latent_results_df.columns)
+                            sample_latent_results_df = pd.concat([sample_latent_results_df, row_df])
+                            
+                        del sample_latent_outputs
+                        
                 del outputs
+                        
             results_df.reset_index(inplace=True, drop=True)
             results_df[self.evaluation_metrics] = results_df[
                 self.evaluation_metrics
@@ -267,11 +312,15 @@ class TaskManager:
 
         if not use_labels:
             metrics_df = None
+            sample_latent_metrics_df = None
         else:
             metrics_df = self.compute_metrics(results_df)
+            sample_latent_metrics_df = None
+            if sample_latent > 0:
+                sample_latent_metrics_df = self.compute_metrics_sample_latent(sample_latent_results_df)
         torch.cuda.empty_cache()
 
-        return results_df, metrics_df
+        return results_df, metrics_df, sample_latent_results_df, sample_latent_metrics_df
 
     def test(
         self,

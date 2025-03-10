@@ -2,6 +2,8 @@ import torch
 from torch import nn
 from torch.utils.data import sampler
 
+import pandas as pd
+
 from clinicadl.utils.exceptions import ClinicaDLArgumentError
 from clinicadl.utils.task_manager.task_manager import TaskManager
 
@@ -61,6 +63,20 @@ class ReconstructionManager(TaskManager):
             row.append(ap)
         
         return [row]
+    
+    def generate_test_row_sample_latent(self, idx, sample_latent_idx, data, outputs):
+        y = data["data"][idx]
+        y_pred = outputs[idx].cpu()
+        metrics = self.metrics_module.apply(y, y_pred)
+        row = [
+            data["participant_id"][idx],
+            data["session_id"][idx],
+            data[f"{self.mode}_id"][idx].item(),
+            sample_latent_idx,
+        ]
+        for metric in self.evaluation_metrics:
+            row.append(metrics[metric])
+        return [row]
 
     def compute_metrics(self, results_df, sim_hypo=False):
         metrics = dict()
@@ -71,10 +87,35 @@ class ReconstructionManager(TaskManager):
                 metrics[metric+"_gt"] = results_df[metric+"_gt"].mean()
             # Add AP
             metrics["AP"] = results_df["AP"].mean()
-
         return metrics
-    
         #return results_df.describe()
+        
+    def compute_metrics_sample_latent(self, sample_latent_results_df):
+        grouped = sample_latent_results_df.groupby(['participant_id', 'session_id', f'{self.mode}_id'])
+
+        metrics_data = {
+            'participant_id': [],
+            'session_id': [],
+            f'{self.mode}_id': []
+        }
+        
+        for metric in self.evaluation_metrics:
+            metrics_data[f'{metric}_mean'] = []
+            metrics_data[f'{metric}_std'] = []
+
+        for name, group in grouped:
+            participant_id, session_id, image_id = name
+            
+            metrics_data['participant_id'].append(participant_id)
+            metrics_data['session_id'].append(session_id)
+            metrics_data['image_id'].append(image_id)
+
+            for metric in self.evaluation_metrics:
+                metrics_data[f'{metric}_mean'].append(group[metric].mean())
+                metrics_data[f'{metric}_std'].append(group[metric].std())
+
+        return pd.DataFrame(metrics_data)
+
 
     @staticmethod
     def output_size(input_size, df, label):

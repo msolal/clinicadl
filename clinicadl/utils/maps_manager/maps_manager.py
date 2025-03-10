@@ -264,6 +264,7 @@ class MapsManager:
         save_nifti: bool = False,
         save_latent_tensor: bool = False,
         pythae: bool = False,
+        sample_latent: int = 0,
         sim_hypo: Tuple[str, str, int] = None,
     ):
         """
@@ -289,6 +290,8 @@ class MapsManager:
             overwrite: If True erase the occurrences of data_group.
             label: Target label used for training (if network_task in [`regression`, `classification`]).
             label_code: dictionary linking the target values to a node number.
+            sample_latent: For reconstruction task only, will sample the latent space multiple times to generate
+                multiple reconstructions for a single input.
         """
         if not split_list:
             split_list = self._find_splits()
@@ -367,9 +370,9 @@ class MapsManager:
                     )
                     test_loader = DataLoader(
                         data_test,
-                        batch_size=batch_size
-                        if batch_size is not None
-                        else self.batch_size,
+                        batch_size=(
+                            batch_size if batch_size is not None else self.batch_size
+                        ),
                         shuffle=False,
                         num_workers=n_proc if n_proc is not None else self.n_proc,
                     )
@@ -385,19 +388,21 @@ class MapsManager:
                         save_reconstruction_tensor=save_tensor,
                         save_reconstruction_nifti=save_nifti,
                         save_latent_tensor=save_latent_tensor,
+                        sample_latent=sample_latent,
+                        seed=self.parameters["seed"],
                     )
                     if not pythae: 
-                        if save_tensor or save_nifti or save_latent_tensor:
+                        if save_tensor or save_nifti or save_latent_tensor or sample_latent:
                             self._save_model_output(
-                            data_test,
-                            data_group,
-                            split,
-                            split_selection_metrics,
-                            save_reconstruction_tensor=save_tensor,
-                            save_reconstruction_nifti=save_nifti,
-                            save_latent_tensor=save_latent_tensor,
-                            gpu=gpu,
-                        )
+                                data_test,
+                                data_group,
+                                split,
+                                split_selection_metrics,
+                                save_reconstruction_tensor=save_tensor,
+                                save_reconstruction_nifti=save_nifti,
+                                save_latent_tensor=save_latent_tensor,
+                                gpu=gpu,
+                            )
             else:
                 data_test = return_dataset(
                     group_parameters["caps_directory"],
@@ -416,9 +421,9 @@ class MapsManager:
 
                 test_loader = DataLoader(
                     data_test,
-                    batch_size=batch_size
-                    if batch_size is not None
-                    else self.batch_size,
+                    batch_size=(
+                        batch_size if batch_size is not None else self.batch_size
+                    ),
                     shuffle=False,
                     num_workers=n_proc if n_proc is not None else self.n_proc,
                 )
@@ -435,9 +440,11 @@ class MapsManager:
                     save_reconstruction_nifti=save_nifti,
                     save_latent_tensor=save_latent_tensor,
                     sim_hypo=sim_hypo is not None,
+                    sample_latent=sample_latent,
+                    seed=self.parameters["seed"],
                 )
                 if not pythae: 
-                    if save_tensor or save_nifti or save_latent_tensor:
+                    if save_tensor or save_nifti or save_latent_tensor or sample_latent:
                         self._save_model_output(
                             data_test,
                             data_group,
@@ -1032,6 +1039,8 @@ class MapsManager:
         save_reconstruction_tensor=False,
         save_reconstruction_nifti=False,
         save_latent_tensor=False,
+        sample_latent=0, 
+        seed=None,
         sim_hypo=False,
     ):
         """
@@ -1105,7 +1114,7 @@ class MapsManager:
                 makedirs(latent_tensor_path, exist_ok=True)
 
             if for_pythae:
-                prediction_df, metrics = self.task_manager.test_pythae(
+                prediction_df, metrics, sample_latent_prediction_df, sample_latent_metrics_df = self.task_manager.test_pythae(
                     model, 
                     dataloader, 
                     criterion, 
@@ -1116,6 +1125,8 @@ class MapsManager:
                     tensor_path=tensor_path,
                     nifti_path=nifti_path,
                     latent_tensor_path=latent_tensor_path,
+                    sample_latent=sample_latent,
+                    seed=seed,
                     sim_hypo=sim_hypo,
                 )
             else:
@@ -1131,7 +1142,13 @@ class MapsManager:
 
             # Replace here
             self._mode_level_to_tsv(
-                prediction_df, metrics, split, selection_metric, data_group=data_group
+                prediction_df, 
+                metrics, 
+                split, 
+                selection_metric, 
+                data_group=data_group, 
+                sample_latent_results_df=sample_latent_prediction_df,
+                sample_latent_metrics_df=sample_latent_metrics_df,
             )
 
     def _compute_output_nifti(
@@ -1192,7 +1209,7 @@ class MapsManager:
                 )
                 # Convert tensor to nifti image with appropriate affine
                 input_nii = nib.Nifti1Image(image[0].detach().cpu().numpy(), eye(4))
-                output_nii = nib.Nifti1Image(output[0].numpy(), eye(4))
+                output_nii = nib.Nifti1Image(output[0].detach().cpu().numpy(), eye(4))
                 # Create file name according to participant and session id
                 participant_id = data["participant_id"]
                 session_id = data["session_id"]
@@ -1226,6 +1243,10 @@ class MapsManager:
             gpu (bool): If given, a new value for the device of the model will be computed.
             network (int): Index of the network tested (only used in multi-network setting).
         """
+
+        import nibabel as nib
+        from numpy import eye
+
         for selection_metric in selection_metrics:
             # load the best trained model during the training
             model, _ = self._init_model(
@@ -1309,6 +1330,41 @@ class MapsManager:
                         f"{participant_id}_{session_id}_{self.mode}-{mode_id}_latent.pt"
                     )
                     torch.save(latent, path.join(latent_tensor_path, output_filename))
+
+                if sample_latent > 0: 
+                    data = dataset[i]
+                    image = data["data"]
+                    data["data"] = data["data"].unsqueeze(0)
+                    participant_id = data["participant_id"]
+                    session_id = data["session_id"]
+                    mode_id = data[f"{self.mode}_id"] 
+                    
+                    outputs = model.predict(data, sample_latent=sample_latent, seed=seed)
+                    
+                    for i in range(sample_latent):
+                        output = outputs[i]
+                                                
+                        reconstruction = output["recon_x"].squeeze(0).cpu()
+                        output_pt_filename = (
+                            f"{participant_id}_{session_id}_{self.mode}-{mode_id}_output-{i}.pt"
+                        )
+                        torch.save(reconstruction, path.join(tensor_path, output_pt_filename))
+                        logger.debug(f"File saved at {output_pt_filename}")
+                        
+                        # Convert tensor to nifti image with appropriate affine
+                        input_nii = nib.Nifti1Image(image[0].detach().numpy(), eye(4))
+                        output_nii = nib.Nifti1Image(reconstruction[0].detach().numpy(), eye(4))
+                        # Create file name according to participant and session id
+                        input_nii_filename = f"{participant_id}_{session_id}_input.nii.gz"
+                        output_nii_filename = f"{participant_id}_{session_id}_output-{i}.nii.gz"
+                        nib.save(input_nii, path.join(nifti_path, input_nii_filename))
+                        nib.save(output_nii, path.join(nifti_path, output_nii_filename))
+                        
+                        latent = output["embedding"].squeeze(0).cpu()
+                        latent_filename = (
+                            f"{participant_id}_{session_id}_{self.mode}-{mode_id}_latent-{i}.pt"
+                        )
+                        torch.save(latent, path.join(latent_tensor_path, latent_filename))
 
 
     def _ensemble_prediction(
@@ -1812,6 +1868,8 @@ class MapsManager:
         split: int,
         selection: str,
         data_group: str = "train",
+        sample_latent_results_df: pd.DataFrame = None,
+        sample_latent_metrics_df: pd.DataFrame = None,
     ):
         """
         Writes the outputs of the test function in tsv files.
@@ -1842,23 +1900,45 @@ class MapsManager:
                 performance_path, index=False, sep="\t", mode="a", header=False
             )
 
+        if sample_latent_results_df is not None:
+            latent_performance_path = path.join(
+                performance_dir, f"{data_group}_{self.mode}_level_sample-latent_prediction.tsv"
+            )
+            if not path.exists(latent_performance_path):
+                sample_latent_results_df.to_csv(latent_performance_path, index=False, sep="\t")
+            else: 
+                sample_latent_results_df.to_csv(
+                    latent_performance_path, index=False, sep="\t", mode="a", header=False
+                )
+        if sample_latent_metrics_df is not None:
+            latent_metrics_path = path.join(
+                performance_dir, f"{data_group}_{self.mode}_level_sample-latent_metrics.tsv"
+            )
+            if not path.exists(latent_metrics_path):
+                sample_latent_metrics_df.to_csv(latent_metrics_path, index=False, sep="\t")
+            else:   
+                sample_latent_metrics_df.to_csv(
+                    latent_metrics_path, index=False, sep="\t", mode="a", header=False
+                )
+
         metrics_path = path.join(
             performance_dir, f"{data_group}_{self.mode}_level_metrics.tsv"
         )
-        #if metrics is not None:
-        #    if isinstance(metrics, pd.DataFrame):
-        #        metrics.to_csv(
-        #            metrics_path, sep="\t"
-        #        )
-        #    else:
-        #        if not path.exists(metrics_path):
-        #            pd.DataFrame(metrics, index=[0]).to_csv(
-        #                metrics_path, index=False, sep="\t"
-        #            )
-        #        else:
-        #            pd.DataFrame(metrics, index=[0]).to_csv(
-        #                metrics_path, index=False, sep="\t", mode="a", header=False
-        #            )
+        if metrics is not None:
+           if isinstance(metrics, pd.DataFrame):
+               metrics.to_csv(
+                   metrics_path, sep="\t"
+               )
+           else:
+               if not path.exists(metrics_path):
+                   pd.DataFrame(metrics, index=[0]).to_csv(
+                       metrics_path, index=False, sep="\t"
+                   )
+               else:
+                   pd.DataFrame(metrics, index=[0]).to_csv(
+                       metrics_path, index=False, sep="\t", mode="a", header=False
+                   )
+                   
         results_df.describe().to_csv(metrics_path, sep="\t")
             
 

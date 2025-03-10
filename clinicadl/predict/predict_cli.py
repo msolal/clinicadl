@@ -79,6 +79,13 @@ from pathlib import Path
     help="""Save the latent representation of the image.""",
 )
 @click.option(
+    "--sample_latent",
+    type=int,
+    default=0,
+    help="""For reconstruction task only, will sample the latent space multiple times to generate
+    multiple reconstructions for a single input.""",
+)
+@click.option(
     "--sim_hypo", 
     type=(str, str, int),
     default=None,
@@ -108,6 +115,7 @@ def cli(
     save_tensor,
     save_nifti,
     save_latent_tensor,
+    sample_latent,
     sim_hypo,
 ):
     """Infer the outputs of a trained model on a test set.
@@ -139,5 +147,6 @@ def cli(
         save_tensor=save_tensor,
         save_nifti=save_nifti,
         save_latent_tensor=save_latent_tensor,
+        sample_latent=sample_latent,
         sim_hypo=sim_hypo,
     )

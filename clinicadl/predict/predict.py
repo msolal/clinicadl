@@ -24,6 +24,7 @@ def predict(
     save_tensor: bool = False,
     save_nifti: bool = False,
     save_latent_tensor: bool = False,
+    sample_latent: int = 0,
     sim_hypo: Tuple[str, str, int] = None,
 ):
     """
@@ -46,6 +47,8 @@ def predict(
         overwrite: If True former definition of data group is erased
         save_tensor: For reconstruction task only, if True it will save the reconstruction as .pt file in the MAPS.
         save_nifti: For reconstruction task only, if True it will save the reconstruction as NIfTI file in the MAPS.
+        sample_latent: For reconstruction task only, will sample the latent space multiple times to generate multiple 
+            reconstructions for a single input.
         sim_hypo: To simulate hypometabolism on FDG PET (path, pathology, percentage).
     """
     verbose_list = ["warning", "info", "debug"]
@@ -59,6 +62,11 @@ def predict(
     if save_nifti and maps_manager.network_task != "reconstruction":
         raise ClinicaDLArgumentError(
             "Cannot save nifti if the network task is not reconstruction. Please remove --save_nifti option."
+        )
+    if sample_latent and maps_manager.network_task != "reconstruction":
+        raise ClinicaDLArgumentError(
+            "Cannot sample multiple times the latent space if the network task is not reconstruction. \
+                Please remove --sample_latent option."
         )
     # Check if it is a pythae model
     pythae = "pythae" in maps_manager.parameters["architecture"]
@@ -81,5 +89,6 @@ def predict(
         save_nifti=save_nifti,
         save_latent_tensor=save_latent_tensor,
         pythae=pythae, 
+        sample_latent=sample_latent,
         sim_hypo=sim_hypo,
     )
