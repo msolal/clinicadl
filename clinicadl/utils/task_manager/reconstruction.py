@@ -1,9 +1,11 @@
+import torch
 from torch import nn
 from torch.utils.data import sampler
 
 from clinicadl.utils.exceptions import ClinicaDLArgumentError
 from clinicadl.utils.task_manager.task_manager import TaskManager
 
+from sklearn.metrics import average_precision_score
 
 class ReconstructionManager(TaskManager):
     def __init__(
@@ -47,7 +49,16 @@ class ReconstructionManager(TaskManager):
             y_pred = outputs[idx].cpu()
             metrics_gt = self.metrics_module.apply(y, y_pred)
             for metric in self.evaluation_metrics:
-                row.append(metrics_gt[metric])  
+                row.append(metrics_gt[metric])
+            # Compute AP 
+            torch.save(data["label"][idx], f"/lustre/fswork/projects/rech/krk/uqo89gi/projects/midl-2024/0_architecture/maps/MAPS_BetaVAE_001_150/split-0/best-loss/hypo_AD_30/nifti_images/label_{idx}.pt")
+            torch.save(data["data"][idx], f"/lustre/fswork/projects/rech/krk/uqo89gi/projects/midl-2024/0_architecture/maps/MAPS_BetaVAE_001_150/split-0/best-loss/hypo_AD_30/nifti_images/data_{idx}.pt")
+            torch.save(outputs[idx], f"/lustre/fswork/projects/rech/krk/uqo89gi/projects/midl-2024/0_architecture/maps/MAPS_BetaVAE_001_150/split-0/best-loss/hypo_AD_30/nifti_images/outputs_{idx}.pt")
+            gt_mask = data["label"][idx] - data["data"][idx] > 0.05
+            residual = torch.abs(data["data"][idx] - outputs[idx].cpu())
+            residual[data["data"][idx] < 0.1] = 0
+            ap = average_precision_score(gt_mask.flatten(), residual.flatten())
+            row.append(ap)
         
         return [row]
 
@@ -58,6 +69,9 @@ class ReconstructionManager(TaskManager):
         if sim_hypo: 
             for metric in self.evaluation_metrics:
                 metrics[metric+"_gt"] = results_df[metric+"_gt"].mean()
+            # Add AP
+            metrics["AP"] = results_df["AP"].mean()
+
         return metrics
     
         #return results_df.describe()
