@@ -340,9 +340,9 @@ class CapsDatasetImage(CapsDataset):
         if self.sim_hypo: 
             if len(self.transformations.transforms) > 1:
                 label_transformations = transforms.Compose(self.transformations.transforms[1:])
-                label = label_transformations(image)
+                label = label_transformations(image.detach().clone())
             else: 
-                label = image
+                label = image.detach().clone()
 
         if self.transformations:
             image = self.transformations(image)
@@ -1030,9 +1030,8 @@ def get_transforms(
         # "None": None,
         # torchio.transforms 
         "None": RandomNoise(p=0), #trick to have no transformation
-        "RandomNoise": RandomNoise(std=0.01),
-        "RandomBlur": RandomBlur(std=0.01),
-        "RandomGamma": RandomGamma(log_gamma=(-0.01, 0.01)),
+        "RandomNoise": RandomNoise(std=0.02),
+        "RandomBlur": RandomBlur(std=2),
     }
 
     augmentation_list = []
