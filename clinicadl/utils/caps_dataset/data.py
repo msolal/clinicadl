@@ -30,7 +30,6 @@ from clinicadl.extract.extract_utils import (
 )
 from clinicadl.utils.exceptions import (
     ClinicaDLArgumentError,
-    ClinicaDLCAPSError,
     ClinicaDLConfigurationError,
     ClinicaDLTSVError,
 )

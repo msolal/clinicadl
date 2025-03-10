@@ -163,6 +163,7 @@ class MapsManager:
             if not path.exists(model_dir):
                 os.makedirs(model_dir)
 
+            print(f"Seed: {self.seed}")
             seed_everything(self.seed, self.deterministic, self.compensation)
         
             split_df_dict = split_manager[split]

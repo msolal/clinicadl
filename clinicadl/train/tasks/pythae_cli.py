@@ -16,9 +16,10 @@ from clinicadl import MapsManager
 @train_option.tsv_directory
 @train_option.output_maps
 # Options
+@train_option.seed
 @train_option.config_file
 @train_option.split
-def cli(caps_directory, preprocessing_json, tsv_directory, output_maps_directory, config_file, split):
+def cli(caps_directory, preprocessing_json, tsv_directory, output_maps_directory, seed, config_file, split):
     """
     Train a deep learning model to learn a vae variant using Pythae on neuroimaging data.
 
@@ -52,6 +53,9 @@ def cli(caps_directory, preprocessing_json, tsv_directory, output_maps_directory
 
     if split is not None:
         parameters["split"] = split
+
+    if seed is not None: 
+        parameters["seed"] = seed
 
     maps_manager = MapsManager(output_maps_directory, parameters, verbose="info")
     # launch training procedure for Pythae
