@@ -53,9 +53,6 @@ class ReconstructionManager(TaskManager):
             for metric in self.evaluation_metrics:
                 row.append(metrics_gt[metric])
             # Compute AP 
-            torch.save(data["label"][idx], f"/lustre/fswork/projects/rech/krk/uqo89gi/projects/midl-2024/0_architecture/maps/MAPS_BetaVAE_001_150/split-0/best-loss/hypo_AD_30/nifti_images/label_{idx}.pt")
-            torch.save(data["data"][idx], f"/lustre/fswork/projects/rech/krk/uqo89gi/projects/midl-2024/0_architecture/maps/MAPS_BetaVAE_001_150/split-0/best-loss/hypo_AD_30/nifti_images/data_{idx}.pt")
-            torch.save(outputs[idx], f"/lustre/fswork/projects/rech/krk/uqo89gi/projects/midl-2024/0_architecture/maps/MAPS_BetaVAE_001_150/split-0/best-loss/hypo_AD_30/nifti_images/outputs_{idx}.pt")
             gt_mask = data["label"][idx] - data["data"][idx] > 0.05
             residual = torch.abs(data["data"][idx] - outputs[idx].cpu())
             residual[data["data"][idx] < 0.1] = 0
