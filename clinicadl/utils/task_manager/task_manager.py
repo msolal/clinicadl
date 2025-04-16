@@ -205,8 +205,6 @@ class TaskManager:
         model.eval()
         dataloader.dataset.eval()
 
-        results_df = pd.DataFrame(columns=self.columns)
-        sample_latent_results_df = None
         
         columns_hypo = self.columns.copy()
         if sim_hypo: 
@@ -214,7 +212,9 @@ class TaskManager:
                 columns_hypo.append(metric+"_gt")
             columns_hypo.append("AP")
 
-        results_df = pd.DataFrame(columns=self.columns if not sim_hypo else columns_hypo)
+        columns = self.columns if not sim_hypo else columns_hypo
+        results_df = pd.DataFrame(columns=columns)
+        sample_latent_results_df = pd.DataFrame(columns=columns[:3]+["sample_latent_idx"]+columns[3:])
 
         with torch.no_grad():
             for data in dataloader:
@@ -224,7 +224,7 @@ class TaskManager:
                 # Generate detailed DataFrame
                 for idx in range(len(data["participant_id"])):
                     row = self.generate_test_row(idx, data, outputs["recon_x"], sim_hypo=sim_hypo)
-                    row_df = pd.DataFrame(row, columns=self.columns if not sim_hypo else columns_hypo)
+                    row_df = pd.DataFrame(row, columns=columns)
                     results_df = pd.concat([results_df, row_df])
                     
                     image = data["data"][idx]
@@ -270,7 +270,6 @@ class TaskManager:
                         
                     if sample_latent > 0: 
                         
-                        sample_latent_results_df = pd.DataFrame(columns=self.columns[:3]+["sample_latent_idx"]+self.columns[3:])
                         sample_latent_outputs = model.predict(data, sample_latent=sample_latent, seed=seed)
 
                         for i in range(sample_latent):
