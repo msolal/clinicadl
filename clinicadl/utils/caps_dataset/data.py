@@ -56,7 +56,7 @@ class CapsDataset(Dataset):
         label_code: Dict[Any, int] = None,
         augmentation_transformations: Optional[Callable] = None,
         multi_cohort: bool = False,
-        sim_hypo: bool = False,
+        sim_hypo: Optional[Tuple[str, str, int]] = None,
     ):
         self.caps_directory = caps_directory
         self.caps_dict = self.create_caps_dict(caps_directory, multi_cohort)
@@ -298,7 +298,7 @@ class CapsDatasetImage(CapsDataset):
         label_code: Dict[str, int] = None,
         all_transformations: Optional[Callable] = None,
         multi_cohort: bool = False,
-        sim_hypo: bool = False,
+        sim_hypo: Optional[Tuple[str, str, int]] = None,
     ):
         """
         Args:
@@ -375,7 +375,7 @@ class PythaeCAPS(CapsDatasetImage):
         preprocessing_dict,
         train_transformations,
         all_transformations,
-        sim_hypo=False,
+        sim_hypo: Optional[Tuple[str, str, int]] = None,
     ):
         super().__init__(
             caps_directory,
@@ -786,7 +786,7 @@ def return_dataset(
     label_presence: bool = True,
     multi_cohort: bool = False,
     for_pythae: bool = False,
-    sim_hypo: bool = False,
+    sim_hypo: Optional[Tuple[str, str, int]] = None,
 ) -> CapsDataset:
     """
     Return appropriate Dataset according to given options.
@@ -1011,7 +1011,7 @@ def get_transforms(
     data_augmentation: List[str] = None,
     size_reduction: bool = False,
     size_reduction_factor: int = 2,
-    sim_hypo: Tuple[str, str, int] = None,
+    sim_hypo: Optional[Tuple[str, str, int]] = None,
 ) -> Tuple[transforms.Compose, transforms.Compose]:
     """
     Outputs the transformations that will be applied to the dataset

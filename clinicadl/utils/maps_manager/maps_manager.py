@@ -266,7 +266,7 @@ class MapsManager:
         save_latent_tensor: bool = False,
         pythae: bool = False,
         sample_latent: int = 0,
-        sim_hypo: Tuple[str, str, int] = None,
+        sim_hypo: Optional[Tuple[str, str, int]] = None,
     ):
         """
         Performs the prediction task on a subset of caps_directory defined in a TSV file.
@@ -417,7 +417,7 @@ class MapsManager:
                     if label_code == "default"
                     else label_code,
                     for_pythae=pythae,
-                    sim_hypo=sim_hypo is not None,
+                    sim_hypo=sim_hypo,
                 )
 
                 test_loader = DataLoader(
@@ -440,7 +440,7 @@ class MapsManager:
                     save_reconstruction_tensor=save_tensor,
                     save_reconstruction_nifti=save_nifti,
                     save_latent_tensor=save_latent_tensor,
-                    sim_hypo=sim_hypo is not None,
+                    sim_hypo=sim_hypo,
                     sample_latent=sample_latent,
                     seed=self.parameters["seed"],
                 )
@@ -1042,7 +1042,7 @@ class MapsManager:
         save_latent_tensor=False,
         sample_latent=0, 
         seed=None,
-        sim_hypo=False,
+        sim_hypo=None,
     ):
         """
         Launches the testing task on a dataset wrapped by a DataLoader and writes prediction TSV files.
