@@ -31,7 +31,7 @@ class ReconstructionManager(TaskManager):
     def save_outputs(self):
         return True
 
-    def generate_test_row(self, idx, data, outputs, sim_hypo=False):
+    def generate_test_row(self, idx, data, outputs, sim_hypo=None):
         try:
             y = data["data"][idx]
         except:
@@ -46,7 +46,7 @@ class ReconstructionManager(TaskManager):
         for metric in self.evaluation_metrics:
             row.append(metrics[metric])
         
-        if sim_hypo: 
+        if sim_hypo is not None: 
             y = data["label"][idx]
             y_pred = outputs[idx].cpu()
             metrics_gt = self.metrics_module.apply(y, y_pred)
@@ -61,7 +61,7 @@ class ReconstructionManager(TaskManager):
         
         return [row]
     
-    def generate_test_row_sample_latent(self, idx, sample_latent_idx, data, outputs):
+    def generate_test_row_sample_latent(self, idx, sample_latent_idx, data, outputs, sim_hypo=None):
         y = data["data"][idx]
         y_pred = outputs[idx].cpu()
         metrics = self.metrics_module.apply(y, y_pred)
@@ -73,6 +73,23 @@ class ReconstructionManager(TaskManager):
         ]
         for metric in self.evaluation_metrics:
             row.append(metrics[metric])
+
+        if sim_hypo is not None: 
+            y = data["label"][idx]
+            y_pred = outputs[idx].cpu()
+            metrics_gt = self.metrics_module.apply(y, y_pred)
+            for metric in self.evaluation_metrics:
+                row.append(metrics_gt[metric])
+
+            # Compute AP 
+            gt_mask = data["label"][idx] - data["data"][idx] > 0.05
+            residual = torch.abs(data["data"][idx] - outputs[idx].cpu())
+            residual[data["data"][idx] < 0.1] = 0
+            ap = average_precision_score(gt_mask.flatten(), residual.flatten())
+            row.append(ap)
+        
+        return [row]
+
         return [row]
 
     def compute_metrics(self, results_df, sim_hypo=False):

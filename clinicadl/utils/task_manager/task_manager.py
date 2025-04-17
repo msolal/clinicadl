@@ -182,7 +182,7 @@ class TaskManager:
         latent_tensor_path=None,
         sample_latent=0,
         seed=None,
-        sim_hypo=False,
+        sim_hypo=None,
     ) -> Tuple[pd.DataFrame, Dict[str, float]]:
         """
         Computes the predictions and evaluation metrics.
@@ -296,7 +296,7 @@ class TaskManager:
                                 )
                                 torch.save(latent, path.join(latent_tensor_path, latent_filename))
 
-                            row = self.generate_test_row_sample_latent(idx, i, data, output["recon_x"])
+                            row = self.generate_test_row_sample_latent(idx, i, data, output["recon_x"], sim_hypo=sim_hypo)
                             row_df = pd.DataFrame(row, columns=sample_latent_results_df.columns)
                             sample_latent_results_df = pd.concat([sample_latent_results_df, row_df])
                             
