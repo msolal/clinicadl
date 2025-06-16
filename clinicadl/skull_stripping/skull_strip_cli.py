@@ -16,6 +16,7 @@ from clinicadl.utils import cli_param
 @cli_param.option.n_proc
 @cli_param.option.use_gpu
 @cli_param.option.amp
+@cli_param.option.use_uncropped_image
 def synstrip_cli(
     caps_directory,
     preprocessing_dict,
@@ -24,7 +25,7 @@ def synstrip_cli(
     n_proc,
     gpu,
     amp,
-    use_uncropped_image=True,
+    use_uncropped_image,
 ):
     """Performs quality check on t1-linear pipeline.
 

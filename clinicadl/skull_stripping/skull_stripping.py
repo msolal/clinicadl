@@ -10,6 +10,7 @@ import torch
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 from scipy.ndimage import label
+import numpy as np
 from torch.cuda.amp import autocast
 from torch.utils.data import DataLoader
 
@@ -142,7 +143,7 @@ def skull_stripping_synthtrip(
     home = Path.home()
     print(home)
     cache_clinicadl = home / ".cache" / "clinicadl" / "models"
-    url_model = "https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/requirements/"  # https://aramislab.paris.inria.fr/files/data/models/dl/qc/"
+    url_model = "https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/requirements/"
 
     cache_clinicadl.mkdir(parents=True, exist_ok=True)
 
@@ -240,18 +241,32 @@ def skull_stripping_synthtrip(
 
             for idx, sub in enumerate(data_synth["participant_id"]):
                 image_path_i = Path(data_synth["image_path"][idx]).resolve().parent
-                name = (
-                    Path(data_synth["image_path"][idx])
-                    .parts[-1]
-                    .replace("desc-Crop", "desc-Crop_desc-SkullStripped")
-                )
+                if use_uncropped_image:
+                    name = (
+                        Path(data_synth["image_path"][idx])
+                        .parts[-1]
+                        .replace("res", "desc-SkullStripped_res")
+                    )
 
-                name_mask = (
-                    Path(data_synth["image_path"][idx])
-                    .parts[-1]
-                    .replace("T1w.pt", "dseg.pt")
-                    .replace("desc-Crop", "desc-Crop_desc-brain")
-                )
+                    name_mask = (
+                        Path(data_synth["image_path"][idx])
+                        .parts[-1]
+                        .replace("T1w.pt", "dseg.pt")
+                        .replace("res", "desc-brain_res")
+                    )
+                else: 
+                    name = (
+                        Path(data_synth["image_path"][idx])
+                        .parts[-1]
+                        .replace("desc-Crop", "desc-Crop_desc-SkullStripped")
+                    )
+
+                    name_mask = (
+                        Path(data_synth["image_path"][idx])
+                        .parts[-1]
+                        .replace("T1w.pt", "dseg.pt")
+                        .replace("desc-Crop", "desc-Crop_desc-brain")
+                    )
 
                 back_to_norm_transform = transforms.Compose(
                     [
@@ -263,12 +278,14 @@ def skull_stripping_synthtrip(
                 mask = outputs[idx].cpu() < 1.0
                 transformed_mask = back_to_norm_transform(mask)
                 image_np, out = label(transformed_mask.numpy())
-                transformed_mask[image_np > 1] = False
+                unique, counts = np.unique(image_np[image_np>0], return_counts=True)
+                
+                transformed_mask[image_np > unique[np.argmax(counts)]] = False
 
                 skull_stripped = clear_image[idx].cpu()
-                skull_stripped[transformed_mask] = 0.0
+                skull_stripped[~transformed_mask] = skull_stripped.min()
                 torch.save(skull_stripped, image_path_i / name)
-                torch.save(transformed_mask, image_path_i / name_mask)
+                torch.save(transformed_mask.cpu(), image_path_i / name_mask)
 
                 logger.debug(
                     f" sub {sub} - session : {data_synth['session_id'][idx]} done"

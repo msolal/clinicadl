@@ -62,6 +62,7 @@ def load_and_check_tsv(
     if tsv_path is not None:
         if len(caps_dict) == 1:
             df = pd.read_csv(tsv_path, sep="\t")
+            print(list(df.columns.values))
             if ("session_id" not in list(df.columns.values)) or (
                 "participant_id" not in list(df.columns.values)
             ):

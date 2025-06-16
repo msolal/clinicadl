@@ -362,6 +362,7 @@ class CapsDatasetSlice_hr(CapsDataset):
 
         sample = {
             "image": image,
+            "slice_index" : slice_index,
             "label": label,
             "participant_id": participant,
             "session_id": session,
