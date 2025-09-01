@@ -1,5 +1,5 @@
 """
-This file contains all methods needed to perform the quality check procedure after t1-linear preprocessing.
+This file contains all methods needed to perform the quality check procedure after -linear preprocessing.
 """
 
 from logging import getLogger
@@ -23,7 +23,7 @@ from clinicadl.utils.clinica_utils import RemoteFileStructure, fetch_file
 from clinicadl.utils.exceptions import ClinicaDLArgumentError
 
 from .models import StripModel
-
+from .utils import make_derivative_names
 logger = getLogger("clinicadl.quality-check")
 
 
@@ -225,6 +225,8 @@ def skull_stripping_synthtrip(
             f"Skull stripping will be performed over {len(dataloader_synthstrip.dataset)} images."
         )
 
+        success_list = []
+
         for data_synth, data_clear in zip(dataloader_synthstrip, dataloader_unstrip):
             logger.debug(f"Processing subject {data_synth['participant_id']}.")
             inputs = data_synth["image"]
@@ -241,32 +243,8 @@ def skull_stripping_synthtrip(
 
             for idx, sub in enumerate(data_synth["participant_id"]):
                 image_path_i = Path(data_synth["image_path"][idx]).resolve().parent
-                if use_uncropped_image:
-                    name = (
-                        Path(data_synth["image_path"][idx])
-                        .parts[-1]
-                        .replace("res", "desc-SkullStripped_res")
-                    )
 
-                    name_mask = (
-                        Path(data_synth["image_path"][idx])
-                        .parts[-1]
-                        .replace("T1w.pt", "dseg.pt")
-                        .replace("res", "desc-brain_res")
-                    )
-                else: 
-                    name = (
-                        Path(data_synth["image_path"][idx])
-                        .parts[-1]
-                        .replace("desc-Crop", "desc-Crop_desc-SkullStripped")
-                    )
-
-                    name_mask = (
-                        Path(data_synth["image_path"][idx])
-                        .parts[-1]
-                        .replace("T1w.pt", "dseg.pt")
-                        .replace("desc-Crop", "desc-Crop_desc-brain")
-                    )
+                name, name_mask = make_derivative_names(Path(data_synth["image_path"][idx]), use_uncropped_image = use_uncropped_image)
 
                 back_to_norm_transform = transforms.Compose(
                     [
@@ -280,6 +258,11 @@ def skull_stripping_synthtrip(
                 image_np, out = label(transformed_mask.numpy())
                 unique, counts = np.unique(image_np[image_np>0], return_counts=True)
                 
+                if (counts is None ) or (len(counts) == 0):
+                    logger.info(
+                    f" sub {sub} - session : {data_synth['session_id'][idx]} - problem encoutered"
+                    )
+                    continue
                 transformed_mask[image_np > unique[np.argmax(counts)]] = False
 
                 skull_stripped = clear_image[idx].cpu()
@@ -287,8 +270,22 @@ def skull_stripping_synthtrip(
                 torch.save(skull_stripped, image_path_i / name)
                 torch.save(transformed_mask.cpu(), image_path_i / name_mask)
 
-                logger.debug(
+                logger.info(
                     f" sub {sub} - session : {data_synth['session_id'][idx]} done"
                 )
-
+                
+                success_list.append({
+                    "participant_id": sub,
+                    "session_id": data_synth["session_id"][idx],
+                    "image_path": str(image_path_i / name),
+                    "mask_path": str(image_path_i / name_mask)
+                })
+        
+        # save success log
+        if len(success_list) > 0:
+            success_df = pd.DataFrame(success_list)
+            out_tsv = caps_dir / "skull_stripping_success.tsv"
+            success_df.to_csv(out_tsv, sep="\t", index=False)
+            logger.info(f"Saved success log at {out_tsv}")
+        
         logger.info(f"Results are stored at {caps_dir}.")

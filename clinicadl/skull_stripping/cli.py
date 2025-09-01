@@ -5,7 +5,7 @@ import click
 from clinicadl.utils import cli_param
 
 
-@click.command(name="t1-skull-stripping", no_args_is_help=True)
+@click.command(name="skull-stripping", no_args_is_help=True)
 @cli_param.argument.caps_directory
 @click.argument(
     "output_tsv",
@@ -16,6 +16,7 @@ from clinicadl.utils import cli_param
 @cli_param.option.n_proc
 @cli_param.option.use_gpu
 @cli_param.option.amp
+@cli_param.option.use_uncropped_image
 @click.option(
     "--use_tensor",
     type=bool,
@@ -34,9 +35,9 @@ def cli(
     amp,
     network,
     use_tensor,
-    use_uncropped_image=True,
+    use_uncropped_image,
 ):
-    """Performs quality check on t1-linear pipeline.
+    """Performs skull stripping using synstrip.
 
     CAPS_DIRECTORY is the CAPS folder where t1-linear outputs are stored.
 
