@@ -58,7 +58,7 @@ def synstrip_cli(
         gpu=gpu,
         amp=amp,
         use_uncropped_image=use_uncropped_image,
-        nifti=True,
+        nifti=nifti,
     )
 
 

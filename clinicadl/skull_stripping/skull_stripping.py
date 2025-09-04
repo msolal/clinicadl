@@ -116,7 +116,7 @@ def skull_stripping_synthstrip(
     gpu: bool = True,
     amp: bool = False,
     use_uncropped_image: bool = True,
-    nifti: bool = True,
+    nifti: bool = False,
 ):
     """
     Performs MR image skull stripping on caps dataset using SynthStrip model
@@ -140,8 +140,6 @@ def skull_stripping_synthstrip(
         To read inputs and save outputs as nifti files instead of pytorch tensors.
 
     """
-
-    print(nifti)
 
     logger = getLogger("clinicadl.skull_stripping")
 
@@ -245,19 +243,17 @@ def skull_stripping_synthstrip(
             inputs = data_synth["image"]
             clear_image = data_clear["image"]
 
-            # if gpu:
-            #     inputs = inputs.cuda()
-            # with autocast(enabled=amp):
-            #     outputs = model(inputs)
+            if gpu:
+                inputs = inputs.cuda()
+            with autocast(enabled=amp):
+                outputs = model(inputs)
             # We cast back to 32bits. It should be a no-op as softmax is not eligible
             # to fp16 and autocast is forbidden on CPU (output would be bf16 otherwise).
             # But just in case...
-            outputs = inputs
             outputs = outputs.float()
 
             for idx, sub in enumerate(data_synth["participant_id"]):
                 image_path_i = Path(data_synth["image_path"][idx]).resolve().parent
-                print("image_path_i", image_path_i)
 
                 name, name_mask = make_derivative_names(
                     Path(data_synth["image_path"][idx]),
@@ -295,7 +291,6 @@ def skull_stripping_synthstrip(
                         skull_stripped.numpy(), np.eye(4)
                     )
                     nib.save(skull_stripped_nib, image_path_i / name)
-                    print("Saved skull stripped image", image_path_i / name)
 
                     transformed_mask_nib = nib.Nifti1Image(
                         transformed_mask.numpy().astype(np.uint8), np.eye(4)
@@ -304,7 +299,6 @@ def skull_stripping_synthstrip(
                         transformed_mask_nib,
                         image_path_i / name_mask,
                     )
-                    print("Saved mask", image_path_i / name_mask)
 
                 logger.info(
                     f" sub {sub} - session : {data_synth['session_id'][idx]} done"
@@ -327,22 +321,3 @@ def skull_stripping_synthstrip(
             logger.info(f"Saved success log at {out_tsv}")
 
         logger.info(f"Results are stored at {caps_dir}.")
-
-
-CAPS_DIRECTORY = Path(
-    "/Users/maelys.solal/Documents/datasets/adni/caps/caps_jz_skull_stripping"
-)
-PREPROCESSING_DICT = Path(
-    "/Users/maelys.solal/Documents/datasets/adni/caps/caps_jz_skull_stripping/old.json"
-)
-PARTICIPANTS_TSV = Path(
-    "/Users/maelys.solal/Documents/datasets/adni/caps/caps_jz_skull_stripping/participants.tsv"
-)
-
-skull_stripping_synthstrip(
-    CAPS_DIRECTORY,
-    PREPROCESSING_DICT,
-    tsv_path=PARTICIPANTS_TSV,
-    gpu=False,
-    use_uncropped_image=True,
-)
