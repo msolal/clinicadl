@@ -250,14 +250,14 @@ class TaskManager:
                         label = data["label"][idx].squeeze(0).cpu()
                         reconstruction = outputs["recon_x"][idx].squeeze(0).cpu()
                         input_nii = nib.Nifti1Image(image[0].numpy(), eye(4))
-                        sim_nii = nib.Nifti1Image(label.numpy(), eye(4))
+                        # sim_nii = nib.Nifti1Image(label.numpy(), eye(4))
                         output_nii = nib.Nifti1Image(reconstruction.numpy(), eye(4))
                         # Create file name according to participant and session id
                         input_filename = f"{participant_id}_{session_id}_image_input.nii.gz"             
-                        sim_filename = f"{participant_id}_{session_id}_image_sim.nii.gz"
+                        # sim_filename = f"{participant_id}_{session_id}_image_sim.nii.gz"
                         output_filename = f"{participant_id}_{session_id}_image_output.nii.gz"
                         nib.save(input_nii, path.join(nifti_path, input_filename))
-                        nib.save(sim_nii, path.join(nifti_path, sim_filename))
+                        # nib.save(sim_nii, path.join(nifti_path, sim_filename))
                         nib.save(output_nii, path.join(nifti_path, output_filename))
               
                     # Save latent tensor
