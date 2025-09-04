@@ -168,7 +168,9 @@ def skull_stripping_synthstrip(
 
     # Load stripping model
     logger.debug("Loading SynthStrip model.")
-    state_dict_model = torch.load(model_file)
+    state_dict_model = torch.load(
+        model_file, map_location=torch.device("cuda" if gpu else "cpu")
+    )
     model.load_state_dict(state_dict_model["model_state_dict"])
     model.eval()
     if gpu:

@@ -27,11 +27,11 @@ def synstrip_cli(
     amp,
     use_uncropped_image,
 ):
-    """Performs quality check on t1-linear pipeline.
+    """Performs skull stripping.
 
-    CAPS_DIRECTORY is the CAPS folder where t1-linear outputs are stored.
+    caps_directory is the CAPS folder where t1-linear outputs are stored
 
-    PREPROCESSING DICT is the preprocessing dict from clinicadl extract tensor
+    preprocessing_dict is the preprocessing dict from clinicadl extract tensor
 
     """
     from clinicadl.utils.cmdline_utils import check_gpu
