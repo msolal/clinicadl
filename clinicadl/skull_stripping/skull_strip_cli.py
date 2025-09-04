@@ -17,6 +17,13 @@ from clinicadl.utils import cli_param
 @cli_param.option.use_gpu
 @cli_param.option.amp
 @cli_param.option.use_uncropped_image
+@click.option(
+    "nifti",
+    "--nifti",
+    is_flag=True,
+    default=False,
+    help="If flagged, use nifti files instead of pytorch tensors.",
+)
 def synstrip_cli(
     caps_directory,
     preprocessing_dict,
@@ -26,6 +33,7 @@ def synstrip_cli(
     gpu,
     amp,
     use_uncropped_image,
+    nifti,
 ):
     """Performs skull stripping.
 
@@ -39,7 +47,7 @@ def synstrip_cli(
     if gpu:
         check_gpu()
 
-    from .skull_stripping import skull_stripping_synthstrip
+    from clinicadl.skull_stripping.skull_stripping import skull_stripping_synthstrip
 
     skull_stripping_synthstrip(
         caps_directory,
@@ -50,6 +58,7 @@ def synstrip_cli(
         gpu=gpu,
         amp=amp,
         use_uncropped_image=use_uncropped_image,
+        nifti=True,
     )
 
 

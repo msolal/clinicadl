@@ -5,6 +5,7 @@ This file contains all methods needed to perform the quality check procedure aft
 from logging import getLogger
 from pathlib import Path
 
+import nibabel as nib
 import numpy as np
 import pandas as pd
 import torch
@@ -15,15 +16,14 @@ from torch.cuda.amp import autocast
 from torch.utils.data import DataLoader
 
 from clinicadl.generate.generate_utils import load_and_check_tsv
+from clinicadl.skull_stripping.models import StripModel
+from clinicadl.skull_stripping.utils import make_derivative_names
 from clinicadl.utils.caps_dataset.caps_dataset_refactoring.caps_dataset import (
     CapsDataset,
     CapsDatasetImage,
 )
 from clinicadl.utils.clinica_utils import RemoteFileStructure, fetch_file
 from clinicadl.utils.exceptions import ClinicaDLArgumentError
-
-from .models import StripModel
-from .utils import make_derivative_names
 
 logger = getLogger("clinicadl.quality-check")
 
@@ -116,6 +116,7 @@ def skull_stripping_synthstrip(
     gpu: bool = True,
     amp: bool = False,
     use_uncropped_image: bool = True,
+    nifti: bool = True,
 ):
     """
     Performs MR image skull stripping on caps dataset using SynthStrip model
@@ -135,8 +136,12 @@ def skull_stripping_synthstrip(
         If enabled, uses Automatic Mixed Precision (requires GPU usage).
     use_uncropped_image: bool
         To use uncropped images instead of the cropped ones.
+    nifti: bool (default = False)
+        To read inputs and save outputs as nifti files instead of pytorch tensors.
 
     """
+
+    print(nifti)
 
     logger = getLogger("clinicadl.skull_stripping")
 
@@ -201,13 +206,18 @@ def skull_stripping_synthstrip(
         )
 
         dataset_synthstrip = CapsDatasetImage(
-            caps_dir, df, preprocessing_dict, all_transformations=transforms_synthstrip
+            caps_dir,
+            df,
+            preprocessing_dict,
+            all_transformations=transforms_synthstrip,
+            nifti=nifti,
         )
 
         dataset_unorm = CapsDatasetImage(
             caps_dir,
             df,
             preprocessing_dict,
+            nifti=nifti,
         )
 
         dataloader_synthstrip = DataLoader(
@@ -235,17 +245,19 @@ def skull_stripping_synthstrip(
             inputs = data_synth["image"]
             clear_image = data_clear["image"]
 
-            if gpu:
-                inputs = inputs.cuda()
-            with autocast(enabled=amp):
-                outputs = model(inputs)
+            # if gpu:
+            #     inputs = inputs.cuda()
+            # with autocast(enabled=amp):
+            #     outputs = model(inputs)
             # We cast back to 32bits. It should be a no-op as softmax is not eligible
             # to fp16 and autocast is forbidden on CPU (output would be bf16 otherwise).
             # But just in case...
+            outputs = inputs
             outputs = outputs.float()
 
             for idx, sub in enumerate(data_synth["participant_id"]):
                 image_path_i = Path(data_synth["image_path"][idx]).resolve().parent
+                print("image_path_i", image_path_i)
 
                 name, name_mask = make_derivative_names(
                     Path(data_synth["image_path"][idx]),
@@ -273,8 +285,26 @@ def skull_stripping_synthstrip(
 
                 skull_stripped = clear_image[idx].cpu()
                 skull_stripped[~transformed_mask] = skull_stripped.min()
-                torch.save(skull_stripped, image_path_i / name)
-                torch.save(transformed_mask.cpu(), image_path_i / name_mask)
+
+                if not nifti:
+                    torch.save(skull_stripped, image_path_i / name)
+                    torch.save(transformed_mask.cpu(), image_path_i / name_mask)
+
+                else:
+                    skull_stripped_nib = nib.Nifti1Image(
+                        skull_stripped.numpy(), np.eye(4)
+                    )
+                    nib.save(skull_stripped_nib, image_path_i / name)
+                    print("Saved skull stripped image", image_path_i / name)
+
+                    transformed_mask_nib = nib.Nifti1Image(
+                        transformed_mask.numpy().astype(np.uint8), np.eye(4)
+                    )
+                    nib.save(
+                        transformed_mask_nib,
+                        image_path_i / name_mask,
+                    )
+                    print("Saved mask", image_path_i / name_mask)
 
                 logger.info(
                     f" sub {sub} - session : {data_synth['session_id'][idx]} done"
@@ -297,3 +327,22 @@ def skull_stripping_synthstrip(
             logger.info(f"Saved success log at {out_tsv}")
 
         logger.info(f"Results are stored at {caps_dir}.")
+
+
+CAPS_DIRECTORY = Path(
+    "/Users/maelys.solal/Documents/datasets/adni/caps/caps_jz_skull_stripping"
+)
+PREPROCESSING_DICT = Path(
+    "/Users/maelys.solal/Documents/datasets/adni/caps/caps_jz_skull_stripping/old.json"
+)
+PARTICIPANTS_TSV = Path(
+    "/Users/maelys.solal/Documents/datasets/adni/caps/caps_jz_skull_stripping/participants.tsv"
+)
+
+skull_stripping_synthstrip(
+    CAPS_DIRECTORY,
+    PREPROCESSING_DICT,
+    tsv_path=PARTICIPANTS_TSV,
+    gpu=False,
+    use_uncropped_image=True,
+)
