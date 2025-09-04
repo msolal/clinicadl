@@ -39,9 +39,9 @@ def synstrip_cli(
     if gpu:
         check_gpu()
 
-    from .skull_stripping import skull_stripping_synthtrip
+    from .skull_stripping import skull_stripping_synthstrip
 
-    skull_stripping_synthtrip(
+    skull_stripping_synthstrip(
         caps_directory,
         preprocessing_dict,
         tsv_path=participants_tsv,

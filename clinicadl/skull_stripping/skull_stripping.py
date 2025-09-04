@@ -5,12 +5,12 @@ This file contains all methods needed to perform the quality check procedure aft
 from logging import getLogger
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 from scipy.ndimage import label
-import numpy as np
 from torch.cuda.amp import autocast
 from torch.utils.data import DataLoader
 
@@ -24,6 +24,7 @@ from clinicadl.utils.exceptions import ClinicaDLArgumentError
 
 from .models import StripModel
 from .utils import make_derivative_names
+
 logger = getLogger("clinicadl.quality-check")
 
 
@@ -106,7 +107,7 @@ class Unpadd:
         return input_image[..., slice(*pad_3), slice(*pad_2), slice(*pad_1)]
 
 
-def skull_stripping_synthtrip(
+def skull_stripping_synthstrip(
     caps_dir: Path,
     preprocessing_dict: Path,
     tsv_path: Path = None,
@@ -244,7 +245,10 @@ def skull_stripping_synthtrip(
             for idx, sub in enumerate(data_synth["participant_id"]):
                 image_path_i = Path(data_synth["image_path"][idx]).resolve().parent
 
-                name, name_mask = make_derivative_names(Path(data_synth["image_path"][idx]), use_uncropped_image = use_uncropped_image)
+                name, name_mask = make_derivative_names(
+                    Path(data_synth["image_path"][idx]),
+                    use_uncropped_image=use_uncropped_image,
+                )
 
                 back_to_norm_transform = transforms.Compose(
                     [
@@ -256,11 +260,11 @@ def skull_stripping_synthtrip(
                 mask = outputs[idx].cpu() < 1.0
                 transformed_mask = back_to_norm_transform(mask)
                 image_np, out = label(transformed_mask.numpy())
-                unique, counts = np.unique(image_np[image_np>0], return_counts=True)
-                
-                if (counts is None ) or (len(counts) == 0):
+                unique, counts = np.unique(image_np[image_np > 0], return_counts=True)
+
+                if (counts is None) or (len(counts) == 0):
                     logger.info(
-                    f" sub {sub} - session : {data_synth['session_id'][idx]} - problem encoutered"
+                        f" sub {sub} - session : {data_synth['session_id'][idx]} - problem encoutered"
                     )
                     continue
                 transformed_mask[image_np > unique[np.argmax(counts)]] = False
@@ -273,19 +277,21 @@ def skull_stripping_synthtrip(
                 logger.info(
                     f" sub {sub} - session : {data_synth['session_id'][idx]} done"
                 )
-                
-                success_list.append({
-                    "participant_id": sub,
-                    "session_id": data_synth["session_id"][idx],
-                    "image_path": str(image_path_i / name),
-                    "mask_path": str(image_path_i / name_mask)
-                })
-        
+
+                success_list.append(
+                    {
+                        "participant_id": sub,
+                        "session_id": data_synth["session_id"][idx],
+                        "image_path": str(image_path_i / name),
+                        "mask_path": str(image_path_i / name_mask),
+                    }
+                )
+
         # save success log
         if len(success_list) > 0:
             success_df = pd.DataFrame(success_list)
             out_tsv = caps_dir / "skull_stripping_success.tsv"
             success_df.to_csv(out_tsv, sep="\t", index=False)
             logger.info(f"Saved success log at {out_tsv}")
-        
+
         logger.info(f"Results are stored at {caps_dir}.")
