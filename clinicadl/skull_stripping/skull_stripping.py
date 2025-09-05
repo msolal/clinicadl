@@ -288,12 +288,12 @@ def skull_stripping_synthstrip(
 
                 else:
                     skull_stripped_nib = nib.Nifti1Image(
-                        skull_stripped.numpy(), np.eye(4)
+                        skull_stripped[0].numpy(), np.eye(4)
                     )
                     nib.save(skull_stripped_nib, image_path_i / name)
 
                     transformed_mask_nib = nib.Nifti1Image(
-                        transformed_mask.numpy().astype(np.uint8), np.eye(4)
+                        transformed_mask[0].numpy().astype(np.uint8), np.eye(4)
                     )
                     nib.save(
                         transformed_mask_nib,
