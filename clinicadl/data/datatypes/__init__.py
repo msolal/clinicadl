@@ -5,5 +5,6 @@ from .preprocessing import (
     Custom,
     FlairLinear,
     PETLinear,
+    PETLinearSkullStripped,
     T1Linear,
 )
