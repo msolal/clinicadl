@@ -43,6 +43,14 @@ class PETLinear(PET, _LinearPreprocessing):
         - else: only the files that match the pattern
           ``pet_linear/sub-*_ses-*_trc-{tracer}_space-MNI152NLin2009cSym_desc-Crop_res-1x1x1_suvr-{suvr_reference_region}_pet.nii*``
           in the :term:`CAPS` structure will be considered.
+    use_skull_stripped: bool, default=False
+        Whether to use skull-stripped images.
+        - if ``use_skull_stripped=True``: only the files that match the pattern
+          ``pet_linear/sub-*_ses-*_trc-{tracer}_space-MNI152NLin2009cSym_res-1x1x1_suvr-{suvr_reference_region}_desc-Crop_desc-SkullStripped_pet.nii*``
+          in the :term:`CAPS` structure will be considered.
+        - else: only the files that match the pattern
+          ``pet_linear/sub-*_ses-*_trc-{tracer}_space-MNI152NLin2009cSym_desc-Crop_res-1x1x1_suvr-{suvr_reference_region}_pet.nii*``
+          in the :term:`CAPS` structure will be considered.
 
         .. note::
             If ``reconstruction`` is specified, the pattern will be modified as follows:
@@ -50,6 +58,7 @@ class PETLinear(PET, _LinearPreprocessing):
     """
 
     suvr_reference_region: SUVRReferenceRegion = SUVRReferenceRegion.PONS
+    use_skull_stripped: bool = False
 
     @computed_field
     @property
@@ -72,15 +81,22 @@ class PETLinear(PET, _LinearPreprocessing):
             description += (
                 ", and cropped (matrix size 169×208×179, 1 mm isotropic voxels)"
             )
+        if self.use_skull_stripped:
+            description += ", and skull-stripped using SynthStrip"
         return description
 
     def _get_file_pattern(self):
         """
         Constructs the file pattern depending on the parameters of 'pet-linear'.
         """
-        desc_crop = "" if self.use_uncropped_image else "_desc-Crop"
+        desc_crop = (
+            "" if self.use_uncropped_image or self.use_skull_stripped else "_desc-Crop"
+        )
         rec = f"_rec-{self.reconstruction}" if self.reconstruction else ""
-        return f"sub-*_ses-*_trc-{self.tracer}{rec}_space-MNI152NLin2009cSym{desc_crop}_res-1x1x1_suvr-{self.suvr_reference_region}_{self.modality}.nii*"
+        desc_skull_stripped = (
+            "_desc-Crop_desc-SkullStripped" if self.use_skull_stripped else ""
+        )
+        return f"sub-*_ses-*_trc-{self.tracer}{rec}_space-MNI152NLin2009cSym{desc_crop}_res-1x1x1_suvr-{self.suvr_reference_region}{desc_skull_stripped}_{self.modality}.nii*"
 
     def _get_file_name(self) -> str:
         """
@@ -90,4 +106,5 @@ class PETLinear(PET, _LinearPreprocessing):
         return (
             f"pet-linear_{self.tracer}_{self.suvr_reference_region}{'_' + self.reconstruction if self.reconstruction else ''}"
             f"{'' if self.use_uncropped_image else '_cropped'}"
+            f"{'_skullstripped' if self.use_skull_stripped else ''}"
         )
