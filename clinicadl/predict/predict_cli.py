@@ -1,13 +1,14 @@
+from pathlib import Path
+
 import click
 
 from clinicadl.utils import cli_param
-
-from pathlib import Path
 
 
 @click.command(name="predict", no_args_is_help=True)
 @cli_param.argument.input_maps
 @cli_param.argument.data_group
+@cli_param.argument.preprocessing_json
 @click.option(
     "--caps_directory",
     type=click.Path(exists=True),
@@ -86,7 +87,7 @@ from pathlib import Path
     multiple reconstructions for a single input.""",
 )
 @click.option(
-    "--sim_hypo", 
+    "--sim_hypo",
     type=(str, str, int),
     default=None,
     help="""To simulate hypometabolism on FDG PET (path, pathology, percentage).""",
@@ -101,6 +102,7 @@ def cli(
     input_maps_directory,
     data_group,
     caps_directory,
+    preprocessing_json,
     participants_tsv,
     split,
     gpu,
@@ -133,6 +135,7 @@ def cli(
         maps_dir=input_maps_directory,
         data_group=data_group,
         caps_directory=caps_directory,
+        preprocessing_json=preprocessing_json,
         tsv_path=participants_tsv,
         use_labels=use_labels,
         label=label,

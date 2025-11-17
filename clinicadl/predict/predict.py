@@ -1,6 +1,6 @@
 # coding: utf8
-from typing import List, Tuple
 from pathlib import Path
+from typing import List, Tuple
 
 from clinicadl import MapsManager
 from clinicadl.utils.exceptions import ClinicaDLArgumentError
@@ -10,6 +10,7 @@ def predict(
     maps_dir: str,
     data_group: str,
     caps_directory: str,
+    preprocessing_json: str = None,
     tsv_path: Path,
     use_labels: bool = True,
     label: str = None,
@@ -47,7 +48,7 @@ def predict(
         overwrite: If True former definition of data group is erased
         save_tensor: For reconstruction task only, if True it will save the reconstruction as .pt file in the MAPS.
         save_nifti: For reconstruction task only, if True it will save the reconstruction as NIfTI file in the MAPS.
-        sample_latent: For reconstruction task only, will sample the latent space multiple times to generate multiple 
+        sample_latent: For reconstruction task only, will sample the latent space multiple times to generate multiple
             reconstructions for a single input.
         sim_hypo: To simulate hypometabolism on FDG PET (path, pathology, percentage).
     """
@@ -74,6 +75,7 @@ def predict(
     maps_manager.predict(
         data_group,
         caps_directory=caps_directory,
+        preprocessing_json=preprocessing_json,
         tsv_path=tsv_path,
         split_list=split_list,
         selection_metrics=selection_metrics,
@@ -88,7 +90,7 @@ def predict(
         save_tensor=save_tensor,
         save_nifti=save_nifti,
         save_latent_tensor=save_latent_tensor,
-        pythae=pythae, 
+        pythae=pythae,
         sample_latent=sample_latent,
         sim_hypo=sim_hypo,
     )
