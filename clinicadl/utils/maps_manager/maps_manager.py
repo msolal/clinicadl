@@ -246,7 +246,7 @@ class MapsManager:
         self,
         data_group: str,
         caps_directory: str = None,
-        preprocessing_json: str = None,
+        preprocessing_json: Path = None,
         tsv_path: Path = None,
         split_list: List[int] = None,
         selection_metrics: List[str] = None,

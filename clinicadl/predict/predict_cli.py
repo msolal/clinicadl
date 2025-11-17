@@ -8,7 +8,12 @@ from clinicadl.utils import cli_param
 @click.command(name="predict", no_args_is_help=True)
 @cli_param.argument.input_maps
 @cli_param.argument.data_group
-@cli_param.argument.preprocessing_json
+@cli_param.option(
+    "--preprocessing_json",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to the JSON file used for preprocessing, if different from the one used during network training.",
+)
 @click.option(
     "--caps_directory",
     type=click.Path(exists=True),

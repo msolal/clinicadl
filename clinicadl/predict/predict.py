@@ -10,7 +10,7 @@ def predict(
     maps_dir: str,
     data_group: str,
     caps_directory: str,
-    preprocessing_json: str = None,
+    preprocessing_json: Path = None,
     tsv_path: Path,
     use_labels: bool = True,
     label: str = None,
