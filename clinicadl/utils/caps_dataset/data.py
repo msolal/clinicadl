@@ -168,15 +168,26 @@ class CapsDataset(Dataset):
             logger.debug(f"clinica_file_reader output: {image_path_list}")
             image_filename = path.basename(image_path_list[0]).replace(".nii.gz", ".pt")
             folder, _ = compute_folder_and_file_type(self.preprocessing_dict)
-            image_dir = path.join(
-                self.caps_dict[cohort],
-                "subjects",
-                participant,
-                session,
-                "deeplearning_prepare_data",
-                "image_based",
-                folder,
-            )
+            if self.preprocessing_dict['old_tensors'] == True: 
+                print("Old tensors")
+                image_dir = path.join(
+                    self.caps_dict[cohort],
+                    "subjects",
+                    participant,
+                    session,
+                    "pet_linear",
+                    "tensors",
+                )
+            else: 
+                image_dir = path.join(
+                    self.caps_dict[cohort],
+                    "subjects",
+                    participant,
+                    session,
+                    "deeplearning_prepare_data",
+                    "image_based",
+                    folder,
+                )
             image_path = path.join(image_dir, image_filename)
         # Try to find .pt file
         except ClinicaCAPSError:
@@ -337,6 +348,9 @@ class CapsDatasetImage(CapsDataset):
 
         image_path = self._get_image_path(participant, session, cohort)
         image = torch.load(image_path)
+
+        if isinstance(image, dict): 
+            image = image['image']
         
         if self.sim_hypo: 
             if len(self.transformations.transforms) > 1:
