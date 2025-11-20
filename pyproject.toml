@@ -44,6 +44,7 @@ pynvml = "*"
 mkdocs = {version = "^1.1", optional = true}
 mkdocs-material = {version = "*", optional = true}
 pymdown-extensions = {version = "*", optional = true}
+setuptools = "<70"
 
 [tool.poetry.dev-dependencies]
 black = "*"
