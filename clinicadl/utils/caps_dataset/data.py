@@ -168,7 +168,7 @@ class CapsDataset(Dataset):
             logger.debug(f"clinica_file_reader output: {image_path_list}")
             image_filename = path.basename(image_path_list[0]).replace(".nii.gz", ".pt")
             folder, _ = compute_folder_and_file_type(self.preprocessing_dict)
-            if self.preprocessing_dict['old_tensors'] == True: 
+            if self.preprocessing_dict['old_tensors'] == True:
                 print("Old tensors")
                 image_dir = path.join(
                     self.caps_dict[cohort],
@@ -178,7 +178,7 @@ class CapsDataset(Dataset):
                     "pet_linear",
                     "tensors",
                 )
-            else: 
+            else:
                 image_dir = path.join(
                     self.caps_dict[cohort],
                     "subjects",
@@ -349,14 +349,14 @@ class CapsDatasetImage(CapsDataset):
         image_path = self._get_image_path(participant, session, cohort)
         image = torch.load(image_path)
 
-        if isinstance(image, dict): 
+        if isinstance(image, dict):
             image = image['image']
-        
-        if self.sim_hypo: 
+
+        if self.sim_hypo:
             if len(self.transformations.transforms) > 1:
                 label_transformations = transforms.Compose(self.transformations.transforms[1:])
                 label = label_transformations(image.detach().clone())
-            else: 
+            else:
                 label = image.detach().clone()
 
         if self.transformations:
@@ -400,7 +400,7 @@ class PythaeCAPS(CapsDatasetImage):
             all_transformations=all_transformations,
             sim_hypo=sim_hypo,
         )
-    
+
     def __getitem__(self, index):
         X = super().__getitem__(index)
         return DatasetOutput(
@@ -1043,7 +1043,7 @@ def get_transforms(
         "CropPad": RandomCropPad(10),
         "Smoothing": RandomSmoothing(),
         # "None": None,
-        # torchio.transforms 
+        # torchio.transforms
         "None": RandomNoise(p=0), #trick to have no transformation
         "RandomNoise": RandomNoise(std=0.02),
         "RandomBlur": RandomBlur(std=2),
@@ -1057,12 +1057,12 @@ def get_transforms(
             [augmentation_dict[augmentation] for augmentation in data_augmentation]
         )
 
-    if sim_hypo is not None: 
+    if sim_hypo is not None:
         hypo_mask_path, pathology, percentage = sim_hypo
         transformations_list.append(
             SimulateHypometabolic(hypo_mask_path=hypo_mask_path, pathology=pathology, percentage=percentage)
         )
-        
+
     transformations_list.append(NanRemoval())
     if normalize:
         transformations_list.append(MinMaxNormalization())
