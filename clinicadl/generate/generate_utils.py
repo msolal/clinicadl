@@ -3,43 +3,18 @@
 import random
 from copy import copy
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
 from scipy.ndimage import gaussian_filter
 from skimage.draw import ellipse
 
-from clinicadl.utils.caps_dataset.data import check_multi_cohort_tsv
-from clinicadl.utils.clinica_utils import (
-    create_subs_sess_list,
-    linear_nii,
-    pet_linear_nii,
+from clinicadl.utils.exceptions import (
+    ClinicaDLTSVError,
 )
-from clinicadl.utils.exceptions import ClinicaDLArgumentError
-
-
-def find_file_type(
-    preprocessing: str,
-    uncropped_image: bool,
-    tracer: str,
-    suvr_reference_region: str,
-) -> Dict[str, str]:
-    if preprocessing == "t1-linear":
-        file_type = linear_nii("T1w", uncropped_image)
-    elif preprocessing == "pet-linear":
-        if tracer is None or suvr_reference_region is None:
-            raise ClinicaDLArgumentError(
-                "`tracer` and `suvr_reference_region` must be defined "
-                "when using `pet-linear` preprocessing."
-            )
-        file_type = pet_linear_nii(tracer, suvr_reference_region, uncropped_image)
-    else:
-        raise NotImplementedError(
-            f"Generation of synthetic data is not implemented for preprocessing {preprocessing}"
-        )
-
-    return file_type
+from clinicadl.utils.iotools.clinica_utils import create_subs_sess_list
+from clinicadl.utils.iotools.data_utils import check_multi_cohort_tsv
 
 
 def write_missing_mods(output_dir: Path, output_df: pd.DataFrame) -> None:
@@ -57,16 +32,16 @@ def write_missing_mods(output_dir: Path, output_df: pd.DataFrame) -> None:
 
 
 def load_and_check_tsv(
-    tsv_path: Path, caps_dict: Dict[str, Path], output_path: Path
+    tsv_path: Optional[Path], caps_dict: Dict[str, Path], output_path: Path
 ) -> pd.DataFrame:
-    if tsv_path is not None:
+    if tsv_path is not None and tsv_path.is_file():
         if len(caps_dict) == 1:
             df = pd.read_csv(tsv_path, sep="\t")
             print(list(df.columns.values))
             if ("session_id" not in list(df.columns.values)) or (
                 "participant_id" not in list(df.columns.values)
             ):
-                raise Exception(
+                raise ClinicaDLTSVError(
                     "the data file is not in the correct format."
                     "Columns should include ['participant_id', 'session_id']"
                 )
@@ -78,8 +53,12 @@ def load_and_check_tsv(
             check_multi_cohort_tsv(tsv_df, "labels")
             df = pd.DataFrame()
             for idx in range(len(tsv_df)):
-                cohort_name = tsv_df.loc[idx, "cohort"]
-                cohort_path = tsv_df.loc[idx, "path"]
+                cohort_name = tsv_df.at[idx, "cohort"]
+                cohort_path = Path(tsv_df.at[idx, "path"])
+                if not cohort_path.is_file():
+                    raise ClinicaDLTSVError(
+                        f"The cohort path: {cohort_path} doesn't lead to a file"
+                    )
                 cohort_df = pd.read_csv(cohort_path, sep="\t")
                 cohort_df["cohort"] = cohort_name
                 df = pd.concat([df, cohort_df])

@@ -1,18 +1,26 @@
+import abc
+
 import torch
-from torch.cuda.amp import autocast
+from torch.amp import autocast
 
 from clinicadl.utils.exceptions import ClinicaDLArgumentError
 
 
-class VanillaBackProp:
-    """
-    Produces gradients generated with vanilla back propagation from the image
-    """
-
+class Gradients:
     def __init__(self, model):
         self.model = model
         self.model.eval()
         self.device = next(model.parameters()).device
+
+    @abc.abstractmethod
+    def generate_gradients(self):
+        pass
+
+
+class VanillaBackProp(Gradients):
+    """
+    Produces gradients generated with vanilla back propagation from the image
+    """
 
     def generate_gradients(
         self, input_batch, target_class, amp: bool = False, **kwargs
@@ -20,7 +28,7 @@ class VanillaBackProp:
         # Forward
         input_batch = input_batch.to(self.device)
         input_batch.requires_grad = True
-        with autocast(enabled=amp):
+        with autocast("cuda", enabled=amp):
             if hasattr(self.model, "variational") and self.model.variational:
                 _, _, _, model_output = self.model(input_batch)
             else:
@@ -36,18 +44,15 @@ class VanillaBackProp:
         return gradients
 
 
-class GradCam:
+class GradCam(Gradients):
     """
     Produces Grad-CAM to a monai.networks.nets.Classifier
     """
 
     def __init__(self, model):
-        from clinicadl.utils.network.sub_network import CNN
+        from clinicadl.networks.old_network.sub_network import CNN
 
-        self.model = model
-        self.model.eval()
-        self.device = next(model.parameters()).device
-
+        super().__init__(model=model)
         if not isinstance(model, CNN):
             raise ValueError("Grad-CAM was only implemented for CNN models.")
 
@@ -89,7 +94,7 @@ class GradCam:
         # Get last conv feature map
         feature_maps = conv_part(input_batch).detach()
         feature_maps.requires_grad = True
-        with autocast(enabled=amp):
+        with autocast("cuda", enabled=amp):
             model_output = fc_part(pre_fc_part(feature_maps))
         # Target for backprop
         one_hot_output = torch.zeros_like(model_output)
@@ -116,6 +121,3 @@ class GradCam:
         )
 
         return resize_transform(grad_cam)
-
-
-method_dict = {"gradients": VanillaBackProp, "grad-cam": GradCam}

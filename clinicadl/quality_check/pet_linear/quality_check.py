@@ -12,27 +12,22 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 
-from clinicadl.utils.clinica_utils import (
+from clinicadl.data.caps_dataset_config import CapsDatasetConfig
+from clinicadl.data.utils import pet_linear_nii
+from clinicadl.utils.iotools.clinica_utils import (
     RemoteFileStructure,
     clinicadl_file_reader,
     fetch_file,
     get_subject_session_list,
-    pet_linear_nii,
 )
 
 from .utils import get_metric
 
 
 def quality_check(
-    caps_dir: Path,
+    config: CapsDatasetConfig,
     output_tsv: Path,
-    tracer: str,
-    ref_region: str,
-    use_uncropped_image: bool,
-    participants_tsv: Path = None,
     threshold: float = 0.8,
-    n_proc: int = 0,
-    gpu: bool = False,
 ):
     """
     Performs quality check on pet-linear pipeline.
@@ -58,7 +53,6 @@ def quality_check(
     n_proc: int
         Number of cores used during the task.
     """
-    # caps_dir= Path(caps_dir)
     logger = getLogger("clinicadl.quality_check")
 
     if Path(output_tsv).is_file():
@@ -84,7 +78,7 @@ def quality_check(
         except IOError as err:
             raise IOError("Unable to download required MNI file for QC: ", err)
 
-    mask_contour_nii = nib.load(mask_contour_file)
+    mask_contour_nii = nib.loadsave.load(mask_contour_file)
     mask_contour = mask_contour_nii.get_fdata()
     mask_contour.astype(int)
 
@@ -99,20 +93,18 @@ def quality_check(
 
     results_df = pd.DataFrame(columns=columns)
     subjects, sessions = get_subject_session_list(
-        caps_dir, participants_tsv, False, False, None
+        config.data.caps_directory, config.data.data_tsv, False, False, None
     )
-    file_type = pet_linear_nii(
-        tracer,
-        ref_region,
-        use_uncropped_image,
-    )
-    input_files = clinicadl_file_reader(subjects, sessions, caps_dir, file_type)[0]
+    file_type = pet_linear_nii(config.preprocessing)
+    input_files = clinicadl_file_reader(
+        subjects, sessions, config.data.caps_directory, file_type
+    )[0]
 
     def write_output_data(file):
         file = Path(file)
 
         if file.is_file():
-            image_nii = nib.load(file)
+            image_nii = nib.loadsave.load(file)
             image_np = image_nii.get_fdata()
         else:
             raise FileNotFoundError(f"Clinical data not found ({file})")
@@ -133,7 +125,7 @@ def quality_check(
 
         return row_df
 
-    results_df = Parallel(n_jobs=n_proc)(
+    results_df = Parallel(n_jobs=config.dataloader.n_proc)(
         delayed(write_output_data)(file) for file in input_files
     )
 

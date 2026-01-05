@@ -8,8 +8,12 @@ import nibabel as nib
 import torch
 from torch.utils.data import Dataset
 
-from clinicadl.prepare_data.prepare_data_utils import compute_folder_and_file_type
-from clinicadl.utils.clinica_utils import clinicadl_file_reader, linear_nii
+from clinicadl.data.caps_dataset_config import CapsDatasetConfig
+from clinicadl.data.caps_dataset_utils import compute_folder_and_file_type
+from clinicadl.data.utils import linear_nii
+from clinicadl.utils.enum import Preprocessing
+from clinicadl.utils.exceptions import ClinicaDLException
+from clinicadl.utils.iotools.clinica_utils import clinicadl_file_reader
 
 
 class QCDataset(Dataset):
@@ -17,10 +21,8 @@ class QCDataset(Dataset):
 
     def __init__(
         self,
-        img_dir: Path,
-        data_df,
-        use_extracted_tensors=False,
-        use_uncropped_image=True,
+        config: CapsDatasetConfig,
+        use_extracted_tensors: bool = True,
     ):
         """
         Args:
@@ -28,17 +30,18 @@ class QCDataset(Dataset):
             data_df (DataFrame): Subject and session list.
 
         """
-        from clinicadl.utils.caps_dataset.data import MinMaxNormalization
+        from clinicadl.transforms.factory import MinMaxNormalization
 
-        self.img_dir = img_dir
-        self.df = data_df
+        self.img_dir = config.data.caps_directory
+        self.df = config.data.data_df
         self.use_extracted_tensors = use_extracted_tensors
-        self.use_uncropped_image = use_uncropped_image
+        self.use_uncropped_image = config.preprocessing.use_uncropped_image
+        self.config = config
 
         if ("session_id" not in list(self.df.columns.values)) or (
             "participant_id" not in list(self.df.columns.values)
         ):
-            raise Exception(
+            raise ClinicaDLException(
                 "The data file is not in the correct format."
                 "Columns should include ['participant_id', 'session_id']"
             )
@@ -46,11 +49,11 @@ class QCDataset(Dataset):
         self.normalization = MinMaxNormalization()
 
         self.preprocessing_dict = {
-            "preprocessing": "t1-linear",
+            "preprocessing": Preprocessing.T1_LINEAR.value,
             "mode": "image",
-            "use_uncropped_image": use_uncropped_image,
-            "file_type": linear_nii("T1w", use_uncropped_image),
-            "use_tensor": use_extracted_tensors,
+            "use_uncropped_image": self.use_uncropped_image,
+            "file_type": linear_nii(config.preprocessing).model_dump(),
+            "use_tensor": self.use_extracted_tensors,
         }
 
     def __len__(self):
@@ -61,14 +64,14 @@ class QCDataset(Dataset):
         session = self.df.loc[idx, "session_id"]
 
         if self.use_extracted_tensors:
-            file_type = self.preprocessing_dict["file_type"]
-            file_type["pattern"] = file_type["pattern"].replace(".nii.gz", ".pt")
+            file_type = self.config.extraction.file_type
+            file_type.pattern = Path(str(file_type.pattern).replace(".nii.gz", ".pt"))
             image_output = clinicadl_file_reader(
                 [subject], [session], self.img_dir, file_type
             )[0]
             image_path = Path(image_output[0])
             image_filename = image_path.name
-            folder, _ = compute_folder_and_file_type(self.preprocessing_dict)
+            folder, _ = compute_folder_and_file_type(config=self.config)
             image_dir = (
                 self.img_dir
                 / "subjects"
@@ -80,16 +83,16 @@ class QCDataset(Dataset):
             )
 
             image_path = image_dir / image_filename
-            image = torch.load(image_path)
+            image = torch.load(image_path, weights_only=True)
             image = self.pt_transform(image)
         else:
             image_path = clinicadl_file_reader(
                 [subject],
                 [session],
                 self.img_dir,
-                linear_nii("T1w", self.use_uncropped_image),
+                linear_nii(self.config.preprocessing),
             )[0]
-            image = nib.load(image_path[0])
+            image = nib.loadsave.load(image_path[0])
             image = self.nii_transform(image)
 
         sample = {"image": image, "participant_id": subject, "session_id": session}

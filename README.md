@@ -1,6 +1,6 @@
 <h1 align="center">
   <a href="http://www.clinicadl.readthedocs.io">
-    <img src="https://clinicadl.readthedocs.io/en/latest/images/logo.png" alt="ClinicaDL Logo" width="120" height="120">
+    <img src="https://clinicadl.readthedocs.io/en/stable/images/logo.png" alt="ClinicaDL Logo" width="120" height="120">
   </a>
   <br/>
   ClinicaDL
@@ -9,9 +9,6 @@
 <p align="center"><strong>Framework for the reproducible processing of neuroimaging data with deep learning methods</strong></p>
 
 <p align="center">
-  <a href="https://ci.inria.fr/clinicadl/job/AD-DL/job/dev/">
-    <img src="https://ci.inria.fr/clinicadl/buildStatus/icon?job=AD-DL%2Fdev" alt="Build Status">
-  </a>
   <a href="https://badge.fury.io/py/clinicadl">
     <img src="https://badge.fury.io/py/clinicadl.svg" alt="PyPI version">
   </a>
@@ -33,34 +30,33 @@
 ## About the project
 
 This repository hosts ClinicaDL, the deep learning extension of [Clinica](https://github.com/aramis-lab/clinica), 
-a python library to process neuroimaging data in [BIDS](https://bids.neuroimaging.io/index.html) format.
+a Python library to process neuroimaging data in [BIDS](https://bids.neuroimaging.io/index.html) format.
 
 > **Disclaimer:** this software is **under development**. Some features can
 change between different releases and/or commits.
 
-To access the full documentation of the project, follow the link 
-[https://clinicadl.readthedocs.io/](https://clinicadl.readthedocs.io/). 
+To access the full documentation of the project, follow the link [https://clinicadl.readthedocs.io/](https://clinicadl.readthedocs.io/). 
 If you find a problem when using it or if you want to provide us feedback,
 please [open an issue](https://github.com/aramis-lab/ad-dl/issues) or write on
 the [forum](https://groups.google.com/forum/#!forum/clinica-user).
 
 ## Getting started
+
 ClinicaDL currently supports macOS and Linux.
 
 We recommend to use `conda` or `virtualenv` for the installation of ClinicaDL
-as it guarantees the correct management of libraries depending on common
-packages:
+as it guarantees the correct management of libraries depending on common packages:
 
 ```{.sourceCode .bash}
-conda create --name ClinicaDL python=3.8
+conda create --name ClinicaDL python=3.10
 conda activate ClinicaDL
 pip install clinicadl
 ```
 
-## Tutorial 
-Visit our [hands-on tutorial web
-site](https://aramislab.paris.inria.fr/clinicadl/tuto) to start
-using **ClinicaDL** directly in a Google Colab instance!
+## Tutorial
+
+Visit our [hands-on tutorial web site](https://aramislab.paris.inria.fr/clinicadl/tuto)
+to start using **ClinicaDL** directly in a Google Colab instance!
 
 ## Related Repositories
 

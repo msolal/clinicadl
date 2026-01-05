@@ -1,6 +1,18 @@
-cff-version: 1.6.1
+cff-version: 2.0.0rc2
 message: If you use this software, please cite it as below.
-authors:
+authors: 
+  - family-names: de Varax
+    given-names: Thibault
+  - family-names: Brianceau
+    given-name: Camille
+  - family-names: Solal
+    given-names: Maëlys
+  - family-names: Roy
+    given-names: Hugues
+  - family-names: Heffernan
+    given-names: Manon
+  - family-names: Godard
+    given-names: Charlotte
   - family-names: Thibeau-Sutre
     given-names: Elina
   - family-names: Diaz
@@ -23,12 +35,10 @@ authors:
     given-names: Sophie
   - family-names: Cassereau
     given-names: Nathan
-  - family-names: Brianceau
-    given-name: Camille
   - family-names: Gensollen
     given-names: Nicolas
-title: "ClinicaDL: Framework for the reproducible processing of neuroimaging data with deep learning methods."
-version: 1.4.0
+title: "ClinicaDL: Python library for the reproducible processing of neuroimaging data with deep learning methods."
+version: 2.0.0rc2
 doi: 10.1016/j.cmpb.2022.106818
 license: MIT
 date-released: 2023-06-09
