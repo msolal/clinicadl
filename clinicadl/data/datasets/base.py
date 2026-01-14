@@ -5,12 +5,7 @@ from collections.abc import Sequence
 from copy import deepcopy
 from logging import getLogger
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Optional,
-    Union,
-)
+from typing import Any, Callable, Optional, Union
 
 import pandas as pd
 import torchio as tio
@@ -24,6 +19,7 @@ from clinicadl.utils.dictionary.words import (
     DF,
     IMAGE,
     LABEL,
+    N_SAMPLES,
     PARTICIPANT,
     PARTICIPANT_ID,
     SESSION,
@@ -284,9 +280,10 @@ class BaseDataset(HasConfig[BaseDatasetConfig], SamplerDataset):
             self.config.transforms
         )  # self.transforms may be modified
 
+        self.columns: list[str] = self.config._columns_names
+
         df = self._get_df_from_input(data)
         self._df = self._process_columns(df, self.config.columns)
-        self.columns: list[str] = self.config._columns_names
 
         self.individual_masks: list[Mask] = list(
             map(self._read_mask, self.config._individual_masks)
@@ -324,11 +321,13 @@ class BaseDataset(HasConfig[BaseDatasetConfig], SamplerDataset):
             data = self._create_df()
             logger.info("Creating a TSV file at %s", data)
 
-        df = read_data(data)
+        to_keep = {PARTICIPANT_ID, SESSION_ID, N_SAMPLES}
+        to_keep.update(self.columns)
 
-        return deepcopy(
-            df.sort_values(by=[PARTICIPANT_ID, SESSION_ID]).reset_index(drop=True)
-        )
+        df = read_data(data)
+        df = df[df.columns.intersection(to_keep)]
+
+        return df.sort_values(by=[PARTICIPANT_ID, SESSION_ID]).reset_index(drop=True)
 
     @abstractmethod
     def _create_df(self) -> pd.DataFrame:

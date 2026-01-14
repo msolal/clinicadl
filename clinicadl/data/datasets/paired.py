@@ -4,12 +4,10 @@ from typing import Any, Iterable, Sequence
 
 import numpy as np
 import pandas as pd
+import torch
 from pydantic import field_validator
 
-from clinicadl.utils.dictionary.words import (
-    PARTICIPANT_ID,
-    SESSION_ID,
-)
+from clinicadl.utils.dictionary.words import PARTICIPANT_ID, SESSION_ID
 
 from ..structures import Sample
 from .collection import CollectionDataset, CollectionDatasetConfig
@@ -233,6 +231,8 @@ class PairedDataset(CollectionDataset, MultiSamplesDataset):
             if len(values) == 0:
                 return np.nan
             elif len(values) == 1:
+                return values[0]
+            elif all(np.array_equal(v, values[0]) for v in values):
                 return values[0]
             else:
                 participant, session, column = group.name
