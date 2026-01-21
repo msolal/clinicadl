@@ -5,52 +5,21 @@
 
 .. automodule:: clinicadl.optim
 
-:mod:`clinicadl.optim.optimizers`
----------------------------------
-
-.. automodule:: clinicadl.optim.optimizers
-
-:mod:`clinicadl.optim.optimizers.config`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. automodule:: clinicadl.optim.optimizers.config
-
-.. currentmodule:: clinicadl.optim.optimizers.config
+.. currentmodule:: clinicadl.optim
 
 .. autosummary::
    :nosignatures:
-   :template: autosummary/class.rst
+   :toctree: ../generated/
+   :template: autosummary/config_class.rst
 
-    AdadeltaConfig
-    AdagradConfig
-    AdamConfig
-    RMSpropConfig
-    SGDConfig
-
-:mod:`clinicadl.optim.lr_schedulers`
-------------------------------------
-
-.. automodule:: clinicadl.optim.lr_schedulers
-
-:mod:`clinicadl.optim.lr_schedulers.config`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. automodule:: clinicadl.optim.lr_schedulers.config
-
-.. currentmodule:: clinicadl.optim.lr_schedulers.config
+   OptimizationConfig
 
 .. autosummary::
    :nosignatures:
-   :template: autosummary/class.rst
+   :template: module.rst
 
-    ConstantLRConfig
-    ExponentialLRConfig
-    LinearLRConfig
-    StepLRConfig
-    MultiStepLRConfig
-    PolynomialLRConfig
-    ReduceLROnPlateauConfig
-    OneCycleLRConfig
+   optimizers.config
+   lr_schedulers.config
 
 .. toctree::
    :hidden:

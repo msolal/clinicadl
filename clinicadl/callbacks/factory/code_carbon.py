@@ -1,10 +1,11 @@
-# TODO : Not working at the moment
+# Note: This callback is currently working but in a very basic way. It could be improved in the future.
+# For example, by allowing more parameters to be set (like tracking more specific hardware, etc.)
+# See https://codecarbon.io/ for more details.
 
 from importlib.util import find_spec
 from logging import getLogger
-from pathlib import Path
 
-from clinicadl.callbacks.training_state import _TrainingState
+from clinicadl.train.trainer_state import TrainerState
 
 from .base import Callback
 
@@ -13,7 +14,7 @@ CODECARBON = "codecarbon"
 
 class CodeCarbon(Callback):
     """
-    CodeCarbon callback to estimate and track carbon emissions from your computer, quantify and analyze their impact.
+    `CodeCarbon <https://codecarbon.io/>`_ callback to estimate and track carbon emissions from your computer, quantify and analyze their impact.
     See https://codecarbon.io/ for more information.
     """
 
@@ -22,14 +23,16 @@ class CodeCarbon(Callback):
             raise ModuleNotFoundError(
                 "`codecarbon` must be installed. Run: pip install codecarbon"
             )
-        self.tracker = None
 
     @staticmethod
     def is_available() -> bool:
         """Check if codecarbon package is installed and available"""
         return find_spec(CODECARBON) is not None
 
-    def set_tracker(self, config: _TrainingState):
+    def set_tracker(self, config: TrainerState):
+        """
+        Initialize the CodeCarbon tracker.
+        """
         from codecarbon import EmissionsTracker, OfflineEmissionsTracker
         from codecarbon.output_methods.logger import LoggerOutput
 
@@ -52,9 +55,9 @@ class CodeCarbon(Callback):
                 output_dir=str(codecarbon_dir),
             )
 
-    def on_train_begin(self, config: _TrainingState, **kwargs) -> None:
+    def on_train_begin(self, config: TrainerState, **kwargs) -> None:
         self.set_tracker(config)
         self.tracker.start()
 
-    def on_train_end(self, config: _TrainingState, **kwargs) -> None:
+    def on_train_end(self, config: TrainerState, **kwargs) -> None:
         self.tracker.stop()

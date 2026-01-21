@@ -1,15 +1,19 @@
-import numbers
+from __future__ import annotations
+
 from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
+import numpy as np
 import torch
 import torchio as tio
 from monai.data import MetaTensor
 from monai.transforms import Transform as MonaiTransform
-from numpy import ndarray
 
-from clinicadl.data.structures import DataPoint
+if TYPE_CHECKING:
+    from clinicadl.data.structures import DataPoint
+
+DataPointT = TypeVar("DataPointT", bound="DataPoint")
 
 
 class MonaiTransformWrapper:
@@ -31,6 +35,8 @@ class MonaiTransformWrapper:
     exclude : Optional[Sequence[str]], default=None
         The key(s) of the ``DataPoints`` to which the transform will **not** be applied.
         ``exclude`` cannot be passed with ``include``.
+    copy : bool, default=False
+        Whether to make a deepcopy of the input before applying the transforms.
 
     Raises
     ------
@@ -43,21 +49,24 @@ class MonaiTransformWrapper:
         transform: MonaiTransform,
         include: Optional[Sequence[str]] = None,
         exclude: Optional[Sequence[str]] = None,
+        copy: bool = False,
     ) -> None:
         self.transform = transform
         if include and exclude:
             raise ValueError("You cannot pass both 'include' and 'exclude'.")
         self.include = include
         self.exclude = exclude if exclude else []
+        self.copy = copy
 
     def __repr__(self):
         return f"{self.__class__.__name__}(transform={repr(self.transform)}, include={self.include})"
 
-    def __call__(self, datapoint: DataPoint) -> DataPoint:
+    def __call__(self, datapoint: DataPointT) -> DataPointT:
         """
         Applies the transform to the fields in 'include'.
         """
-        datapoint = deepcopy(datapoint)
+        if self.copy:
+            datapoint = deepcopy(datapoint)
 
         for key, value in datapoint.items():
             if key in self.exclude:
@@ -68,42 +77,29 @@ class MonaiTransformWrapper:
                 continue
 
             value = datapoint[key]
-            self._check_type(key, value)
 
             if isinstance(value, tio.Image):
                 self._transform_tio_image(value)
             else:
                 if isinstance(value, torch.Tensor):
                     transform = self._transform
-                elif isinstance(value, ndarray):
-                    transform = self._transform_ndarray
-                elif isinstance(value, numbers.Number):
-                    transform = self._transform_numeric
+                else:
+                    transform = self._transform_array_like
 
-                datapoint[key] = transform(value)
-
-        datapoint.update_attributes()  # so that datapoint.label matches datapoint["label"]
+                try:
+                    datapoint[key] = transform(value)
+                except Exception as e:
+                    raise Exception(
+                        f"An error occurred while transforming the field '{key}'."
+                    ) from e
 
         return datapoint
-
-    def _check_type(self, key: str, value: Any) -> None:
-        """
-        Checks that we have a type accepted by MONAI.
-        """
-        if not isinstance(value, (tio.Image, torch.Tensor, ndarray, numbers.Number)):
-            raise TypeError(
-                f"To apply '{self.transform.__class__.__name__}', '{key}' must be a torchio.Image, a torch.Tensor, a numpy.ndarray, "
-                f"or a numeric value. Got a {type(value)}"
-            )
 
     def _transform_tio_image(self, x: tio.Image) -> None:
         x.set_data(self._transform(x.tensor))
 
-    def _transform_ndarray(self, x: ndarray) -> ndarray:
-        return self._transform(x).numpy()
-
-    def _transform_numeric(self, x: numbers.Number) -> numbers.Number:
-        return self._transform(x).item()
+    def _transform_array_like(self, x: np.typing.ArrayLike) -> np.ndarray:
+        return self._transform(np.array(x)).numpy()
 
     def _transform(self, x: Any) -> torch.Tensor:
         out = self.transform(x)

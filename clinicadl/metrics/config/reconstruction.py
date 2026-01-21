@@ -10,11 +10,12 @@ from pydantic import (
     model_validator,
 )
 
-from clinicadl.losses.enum import Reduction
+from clinicadl.losses.config.enum import Reduction
 from clinicadl.utils.factories import get_defaults_from
 
+from ..enum import Optimum
 from .base import MetricConfig, _GetNotNansConfig
-from .enum import Kernel, Optimum
+from .enum import Kernel
 
 __all__ = [
     "PSNRMetricConfig",

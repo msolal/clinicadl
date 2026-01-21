@@ -4,16 +4,16 @@ import monai
 import monai.metrics
 from pydantic import NonNegativeFloat, PositiveInt, field_validator
 
-from clinicadl.losses.enum import Reduction
+from clinicadl.losses.config.enum import Reduction
 from clinicadl.utils.factories import get_defaults_from
 
+from ..enum import Optimum
 from .base import (
     MetricConfig,
     _GetNotNansConfig,
 )
 from .enum import (
     DistanceMetric,
-    Optimum,
     WeightType,
 )
 

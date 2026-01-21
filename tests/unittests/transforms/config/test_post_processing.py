@@ -1,24 +1,33 @@
 import monai.transforms as transforms
 import pytest
 import torch
+import torchio as tio
 from pydantic import ValidationError
 
-from clinicadl.data import structures
+from clinicadl.data.structures import DataPoint
 from clinicadl.transforms.config import (
     ActivationsConfig,
     AsDiscreteConfig,
     DistanceTransformEDTConfig,
     FillHolesConfig,
+    FormatConfig,
     KeepLargestConnectedComponentConfig,
     LabelFilterConfig,
     RemoveSmallObjectsConfig,
     SobelGradientsConfig,
 )
+from clinicadl.transforms.homemade import Format
 from clinicadl.transforms.monai_wrapper import MonaiTransformWrapper
 
 BAD_INPUTS = [
-    ({"to_onehot": 0, "rounding": "abc"}, AsDiscreteConfig),
+    ({}, ActivationsConfig),
+    ({"dim": -1}, [ActivationsConfig, AsDiscreteConfig]),
+    ({"softmax": True, "sigmoid": True}, ActivationsConfig),
+    ({"to_onehot": 0}, AsDiscreteConfig),
     ({"rounding": "abc"}, AsDiscreteConfig),
+    ({}, AsDiscreteConfig),
+    ({"dtype": int, "argxmax": True}, SobelGradientsConfig),
+    ({"to_onehot": 2, "threshold": 0.5}, AsDiscreteConfig),
     ({"applied_labels": 1.4}, KeepLargestConnectedComponentConfig),
     (
         {"connectivity": 0},
@@ -35,47 +44,70 @@ BAD_INPUTS = [
     ({"kernel_size": 4}, SobelGradientsConfig),
     ({"spatial_axes": -1}, SobelGradientsConfig),
     ({"padding_mode": "abc"}, SobelGradientsConfig),
-    ({"dtype": int}, SobelGradientsConfig),
+    ({"dtype": int}, [SobelGradientsConfig, FormatConfig]),
+    ({"unsqueeze": -1}, FormatConfig),
+    ({"squeeze": [0, -1]}, FormatConfig),
 ]
 GOOD_INPUTS = [
     (
         {"include": ["abc"]},
         [
-            ActivationsConfig,
-            AsDiscreteConfig,
             KeepLargestConnectedComponentConfig,
             DistanceTransformEDTConfig,
             RemoveSmallObjectsConfig,
             SobelGradientsConfig,
+            FormatConfig,
         ],
     ),
     (
         {"exclude": ["abc"]},
         [
-            ActivationsConfig,
-            AsDiscreteConfig,
             KeepLargestConnectedComponentConfig,
             DistanceTransformEDTConfig,
             RemoveSmallObjectsConfig,
             SobelGradientsConfig,
+            FormatConfig,
         ],
     ),
-    ({"sigmoid": True, "softmax": False, "other": lambda x: x}, ActivationsConfig),
-    ({"other": None}, ActivationsConfig),
     (
         {
-            "argmax": True,
+            "sigmoid": False,
+            "softmax": False,
+            "other": lambda x: x,
+            "exclude": ["abc"],
+            "dim": 1,
+        },
+        ActivationsConfig,
+    ),
+    ({"softmax": True, "other": None, "include": ["abc"]}, ActivationsConfig),
+    (
+        {
+            "argmax": False,
             "to_onehot": 1,
-            "threshold": -1.5,
-            "rounding": "torchrounding",
+            "threshold": None,
+            "rounding": None,
+            "include": ["abc"],
+            "dtype": torch.int,
+            "dim": 1,
         },
         AsDiscreteConfig,
     ),
     (
         {
-            "to_onehot": None,
-            "threshold": None,
-            "rounding": None,
+            "rounding": "torchrounding",
+            "exclude": ["abc"],
+        },
+        AsDiscreteConfig,
+    ),
+    (
+        {
+            "threshold": 0.5,
+        },
+        AsDiscreteConfig,
+    ),
+    (
+        {
+            "argmax": True,
         },
         AsDiscreteConfig,
     ),
@@ -177,10 +209,19 @@ GOOD_INPUTS = [
         },
         SobelGradientsConfig,
     ),
+    ({"unsqueeze": 0, "squeeze": True, "dtype": torch.int16}, FormatConfig),
+    ({"unsqueeze": None, "squeeze": 1, "dtype": None}, FormatConfig),
+    ({"squeeze": False}, FormatConfig),
+    ({"squeeze": [0, 1]}, FormatConfig),
 ]
 
 
-X = structures.ColinDataPoint()
+X = DataPoint(
+    image=tio.ScalarImage(tensor=torch.randn(1, 2, 2, 2)),
+    label=tio.LabelMap(tensor=torch.randint(0, 2, (1, 2, 2, 2))),
+    participant="abc",
+    session="abc",
+)
 
 
 @pytest.mark.parametrize("args,configs", BAD_INPUTS)
@@ -205,15 +246,19 @@ def test_good_inputs(args: dict, configs):
 @pytest.mark.parametrize(
     "args,config,transform",
     [
-        ({"include": ["label"]}, ActivationsConfig, transforms.Activations),
-        ({"include": ["label"]}, AsDiscreteConfig, transforms.AsDiscrete),
         (
-            {"include": ["label"]},
+            {"softmax": True, "dim": 3},
+            ActivationsConfig,
+            transforms.Activations,
+        ),
+        ({"argmax": True, "dim": 3}, AsDiscreteConfig, transforms.AsDiscrete),
+        (
+            {},
             KeepLargestConnectedComponentConfig,
             transforms.KeepLargestConnectedComponent,
         ),
         (
-            {"include": ["label"]},
+            {},
             DistanceTransformEDTConfig,
             transforms.DistanceTransformEDT,
         ),
@@ -223,18 +268,24 @@ def test_good_inputs(args: dict, configs):
             transforms.RemoveSmallObjects,
         ),
         (
-            {"include": ["label"], "applied_labels": 1},
+            {"applied_labels": 1},
             LabelFilterConfig,
             transforms.LabelFilter,
         ),
-        ({"include": ["label"]}, FillHolesConfig, transforms.FillHoles),
-        ({"include": ["label"]}, SobelGradientsConfig, transforms.SobelGradients),
+        ({}, FillHolesConfig, transforms.FillHoles),
+        ({}, SobelGradientsConfig, transforms.SobelGradients),
+        ({}, FormatConfig, Format),
     ],
 )
 def test_get_object(args, config, transform):
-    c = config(**args)
+    c = config(**args, copy=True)
     transform_from_config = c.get_object()
     assert isinstance(transform_from_config, MonaiTransformWrapper)
     assert isinstance(transform_from_config.transform, transform)
     output = transform_from_config(X)
-    assert isinstance(output, structures.DataPoint)
+    assert isinstance(output, DataPoint)
+    assert output is not X
+
+    # test dim
+    if "dim" in args:
+        transform_from_config.transform.kwargs["dim"] == args["dim"]

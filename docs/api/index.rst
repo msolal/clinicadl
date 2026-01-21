@@ -18,27 +18,28 @@ functions may not be enough to give full guidelines on their use.
 
    callbacks
    data
-   IO
+   infer
+   io
    losses
    metrics
+   models
    networks
    optim
    split
    transforms
-
-   :template: class.rst
-   train.trainer.Trainer
+   train
 
 .. toctree::
    :hidden:
    
    callbacks
    data/index
-   io/index
+   io
    losses
    metrics
+   models
    networks/index
    optim/index
    split
    transforms/index
-   trainer
+   train

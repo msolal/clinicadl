@@ -4,12 +4,12 @@ from typing import Any, Optional, Union
 import torch
 from torch.utils.tensorboard.writer import SummaryWriter
 
-from clinicadl.callbacks.training_state import _TrainingState
+from clinicadl.train.trainer_state import TrainerState
 
 from .base import Callback
 
 
-class Tensorboard(Callback):
+class TensorBoard(Callback):
     """
     Callback to log metrics and optionally the model graph to TensorBoard during training.
 
@@ -46,7 +46,7 @@ class Tensorboard(Callback):
         self.example_input = example_input
         self.writer = None
 
-    def on_train_begin(self, config: _TrainingState, **kwargs) -> None:
+    def on_train_begin(self, config: TrainerState, **kwargs) -> None:
         """
         Initialize the SummaryWriter, setting up the log directory.
 
@@ -66,7 +66,7 @@ class Tensorboard(Callback):
                 )
             self.writer.add_graph(config.model.network, self.example_input)
 
-    def on_epoch_end(self, config: _TrainingState, **kwargs) -> None:
+    def on_epoch_end(self, config: TrainerState, **kwargs) -> None:
         """
         Log metrics from the current epoch to TensorBoard.
 
@@ -88,7 +88,7 @@ class Tensorboard(Callback):
                     # Metric not found for current epoch, skip logging
                     continue
 
-    def on_train_end(self, config: _TrainingState, **kwargs) -> None:
+    def on_train_end(self, config: TrainerState, **kwargs) -> None:
         """
         Close the SummaryWriter to flush all pending events.
         """

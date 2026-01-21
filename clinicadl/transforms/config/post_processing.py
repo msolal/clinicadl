@@ -1,4 +1,6 @@
-from typing import Callable, Optional, Union
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Callable, Optional, Sequence, Union
 
 import torch
 from monai import transforms
@@ -8,15 +10,20 @@ from pydantic import (
     PositiveFloat,
     PositiveInt,
     field_validator,
+    model_validator,
 )
 
-from clinicadl.dictionary.words import EXCLUDE, INCLUDE, NAME
 from clinicadl.transforms.monai_wrapper import MonaiTransformWrapper
+from clinicadl.utils.config import ClinicaDLConfig
+from clinicadl.utils.dictionary.words import COPY_, EXCLUDE, INCLUDE
 from clinicadl.utils.factories import get_defaults_from
 
-from ..types import Transform
+from ..homemade import Format
 from .base import TransformConfig
 from .enum import Rounding, SobelPaddingMode
+
+if TYPE_CHECKING:
+    from ..types import Transform
 
 __all__ = [
     "ActivationsConfig",
@@ -27,6 +34,7 @@ __all__ = [
     "LabelFilterConfig",
     "FillHolesConfig",
     "SobelGradientsConfig",
+    "FormatConfig",
 ]
 
 ACTIVATIONS_MONAI_DEFAULTS = get_defaults_from(transforms.Activations)
@@ -37,6 +45,7 @@ SMALL_OBJECTS_MONAI_DEFAULTS = get_defaults_from(transforms.RemoveSmallObjects)
 LABEL_FILTER_MONAI_DEFAULTS = get_defaults_from(transforms.LabelFilter)
 FILL_HOLES_MONAI_DEFAULTS = get_defaults_from(transforms.FillHoles)
 SOBEL_MONAI_DEFAULTS = get_defaults_from(transforms.SobelGradients)
+FORMAT_DEFAULTS = get_defaults_from(Format)
 
 
 class MonaiTransformConfig(TransformConfig):
@@ -55,10 +64,13 @@ class MonaiTransformConfig(TransformConfig):
             The associated transform.
         """
         monai_transform = self._get_class()(
-            **self.model_dump(exclude={NAME, INCLUDE, EXCLUDE})
+            **self.to_raw_dict(exclude={INCLUDE, EXCLUDE, COPY_})
         )
         transform = MonaiTransformWrapper(
-            monai_transform, include=self.include, exclude=self.exclude
+            monai_transform,
+            include=self.include,
+            exclude=self.exclude,
+            copy=self.copy_,
         )
         return transform
 
@@ -68,7 +80,13 @@ class MonaiTransformConfig(TransformConfig):
         return getattr(transforms, cls._get_name())
 
 
-class ActivationsConfig(MonaiTransformConfig):
+class _DimConfig(ClinicaDLConfig):
+    """Config class for 'dim' parameter."""
+
+    dim: NonNegativeInt = 0
+
+
+class ActivationsConfig(MonaiTransformConfig, _DimConfig):
     """
     Config class for :py:class:`monai.transforms.Activations`.
     """
@@ -79,8 +97,22 @@ class ActivationsConfig(MonaiTransformConfig):
         Callable[[torch.Tensor], torch.Tensor]
     ] = ACTIVATIONS_MONAI_DEFAULTS["other"]
 
+    @model_validator(mode="after")
+    def exclude_multiple_arguments(self):
+        """Ensure that the user pass only one argument."""
+        arguments = [self.sigmoid, self.softmax, self.other]
+        count = sum(1 for item in arguments if item is not None and item is not False)
+        if count > 1:
+            raise ValueError(
+                "You cannot pass more than one argument 'ActivationsConfig'."
+            )
+        elif count == 0:
+            raise ValueError("Please pass at least on argument to 'ActivationsConfig'.")
 
-class AsDiscreteConfig(MonaiTransformConfig):
+        return self
+
+
+class AsDiscreteConfig(MonaiTransformConfig, _DimConfig):
     """
     Config class for :py:class:`monai.transforms.AsDiscrete`.
     """
@@ -89,6 +121,21 @@ class AsDiscreteConfig(MonaiTransformConfig):
     to_onehot: Optional[PositiveInt] = AS_DISCRETE_MONAI_DEFAULTS["to_onehot"]
     threshold: Optional[float] = AS_DISCRETE_MONAI_DEFAULTS["threshold"]
     rounding: Optional[Rounding] = AS_DISCRETE_MONAI_DEFAULTS["rounding"]
+    dtype: torch.dtype = torch.float
+
+    @model_validator(mode="after")
+    def exclude_multiple_arguments(self):
+        """Ensure that the user pass only one argument."""
+        arguments = [self.argmax, self.to_onehot, self.threshold, self.rounding]
+        count = sum(1 for item in arguments if item is not None and item is not False)
+        if count > 1:
+            raise ValueError(
+                "You cannot pass more than one argument 'AsDiscreteConfig'."
+            )
+        elif count == 0:
+            raise ValueError("Please pass at least on argument to 'AsDiscreteConfig'.")
+
+        return self
 
 
 class KeepLargestConnectedComponentConfig(MonaiTransformConfig):
@@ -169,3 +216,20 @@ class SobelGradientsConfig(MonaiTransformConfig):
         if v % 2 == 0:
             raise ValueError(f"'kernel_size' should be odd. Got {v}")
         return v
+
+
+class FormatConfig(MonaiTransformConfig):
+    """
+    Config class for :py:class:`clinicadl.transforms.homemade.Format`.
+    """
+
+    dtype: Optional[torch.dtype] = FORMAT_DEFAULTS["dtype"]
+    squeeze: Union[bool, NonNegativeInt, Sequence[NonNegativeInt]] = FORMAT_DEFAULTS[
+        "squeeze"
+    ]
+    unsqueeze: Optional[NonNegativeInt] = FORMAT_DEFAULTS["unsqueeze"]
+
+    @classmethod
+    def _get_class(cls) -> type[MonaiTransform]:
+        """Returns the transform associated to this config class."""
+        return Format

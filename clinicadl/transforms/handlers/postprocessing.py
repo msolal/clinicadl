@@ -1,14 +1,44 @@
-from typing import Union
+from __future__ import annotations
 
-from pydantic import field_serializer, model_validator
+from typing import TYPE_CHECKING, Any, Sequence, TypeVar
 
-from clinicadl.data.structures import DataPoint
+import torchio as tio
+from pydantic import Field, ValidationInfo, field_validator
 
+from clinicadl.transforms.config import TransformConfig
+from clinicadl.utils.config import ObjectConfig, SequenceOfObjects
+from clinicadl.utils.objects import HasConfig
+
+from ..factory import get_transform_from_dict
 from ..types import Transform, TransformOrConfig
-from .base import TransformsHandler
+from .utils import get_transform_name
+
+if TYPE_CHECKING:
+    from clinicadl.data.dataloader import Batch
+    from clinicadl.data.structures import DataPoint
+
+DataPointT = TypeVar("DataPointT", bound="DataPoint")
 
 
-class Postprocessing(TransformsHandler):
+class PostprocessingConfig(ObjectConfig["Postprocessing"]):
+    """Config class for ``Postprocessing``."""
+
+    transforms: SequenceOfObjects[Transform, TransformConfig] = Field(
+        reader=SequenceOfObjects.build_reader(get_transform_from_dict)
+    )
+
+    @field_validator("transforms", mode="before")
+    @classmethod
+    def _handle_sequence(cls, v: Any, info: ValidationInfo) -> SequenceOfObjects:
+        return SequenceOfObjects.from_sequence(v, field_name=info.field_name)
+
+    @classmethod
+    def _get_class(cls) -> type[Postprocessing]:
+        """Returns the class associated to this config class."""
+        return Postprocessing
+
+
+class Postprocessing(HasConfig[PostprocessingConfig]):
     """
     A configuration class for applying transformations on the outputs of a network.
 
@@ -18,61 +48,66 @@ class Postprocessing(TransformsHandler):
         A list of transformations to apply on the outputs.
     """
 
-    transforms: list[TransformOrConfig]
-    _transforms_processed: Transform
+    _config_type = PostprocessingConfig
 
-    @model_validator(mode="after")
-    def _convert_transforms(self):
-        """
-        Converts the transform configs to actual transform objects.
-        """
-        super()._convert_transforms()
-        return self
-
-    @field_serializer("transforms")
-    @classmethod
-    def _serialize_transforms(
-        cls, transforms: list[TransformOrConfig]
-    ) -> list[Union[str, dict]]:
-        """
-        Handles serialization of transforms that are not passed via
-        TransformConfigs.
-        """
-        return super()._serialize_transforms(transforms)
+    def __init__(
+        self,
+        transforms: Sequence[TransformOrConfig] = [],
+    ):
+        self.config = PostprocessingConfig(
+            transforms=transforms,
+        )
+        self.transforms = tio.Compose(
+            self.config.transforms.get_object(), copy=False
+        )  # copy is specified in the transforms
 
     def __str__(self) -> str:
         """
         Returns a detailed string representation of the ``Postprocessing`` object.
         """
-        str_ = "Postprocessing configuration:\n"
+        str_ = "Postprocessing:\n"
 
-        if self._transforms_processed:
-            for transform in self._transforms_processed:
-                str_ += f"  - {type(transform).__name__}\n"
+        if self.transforms.transforms:
+            for transform in self.transforms.transforms:
+                str_ += f"  - {get_transform_name(transform)}\n"
         else:
             str_ += "No transform applied.\n"
 
         return str_
 
-    def apply(self, datapoint: DataPoint) -> DataPoint:
+    def apply(self, datapoint: DataPointT) -> DataPointT:
         """
         Applies the transforms and returns the output.
-        """
-        return self._transforms_processed(datapoint)
 
-    def batch_apply(self, batch: list[DataPoint]) -> list[DataPoint]:
+        Parameters
+        ----------
+        datapoint : DataPoint
+            A :py:class:`~clinicadl.data.structures.DataPoint`.
+
+        Returns
+        -------
+        DataPoint
+            The transformed ``DataPoint``.
+        """
+        return self.transforms(datapoint)
+
+    def batch_apply(self, batch: Batch[DataPointT]) -> Batch[DataPointT]:
         """
         Applies the transformations to a batch of
         :py:class:`~clinicadl.data.structures.DataPoint`.
 
         Parameters
         ----------
-        batch : list[DataPoint]
-            A batch of :py:class:`~clinicadl.data.structures.DataPoint`.
+        batch : Batch
+            A batch of :py:class:`~clinicadl.data.structures.DataPoint`,
+            passed via a :py:class:`~clinicadl.data.dataloader.Batch`.
 
         Returns
         -------
-        list[DataPoint]
+        Batch
             The transformed batch.
         """
-        return [self.apply(datapoint) for datapoint in batch]
+        for i, datapoint in enumerate(batch):
+            batch[i] = self.apply(datapoint)
+
+        return batch

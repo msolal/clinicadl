@@ -1,15 +1,15 @@
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from clinicadl.callbacks.training_state import _TrainingState
+from clinicadl.io import Maps
 from clinicadl.metrics.handler import MetricsHandler
+from clinicadl.models import Model
 from clinicadl.utils.json import read_json, write_json
 from clinicadl.utils.typing import PathType
 
 from .config import get_callback_from_dict
 from .factory import *
 from .factory.base import Callback
-from .factory.checkpoint_saver import _CheckpointSaver
 from .factory.logger import _Logger
 from .factory.monitor import _Monitor
 from .factory.training_loss import _TrainingLoss
@@ -19,16 +19,14 @@ LOSS = "loss"
 PREFERRED_ORDER = [
     _TrainingLoss.__name__,
     LRScheduler.__name__,
-    _Monitor.__name__,
-    _CheckpointSaver.__name__,
     Checkpoint.__name__,
     ModelSelection.__name__,
+    _Monitor.__name__,
     _Logger.__name__,
     MLflow.__name__,
     CodeCarbon.__name__,
-    Comet.__name__,
     WandB.__name__,
-    Tensorboard.__name__,
+    TensorBoard.__name__,
 ]
 
 
@@ -97,7 +95,7 @@ class _CallbacksHandler:
 
             name = type(callback).__name__
 
-            if isinstance(callback, EarlyStopping):
+            if isinstance(callback, (EarlyStopping, LRScheduler)):
                 count = sum(k.startswith(name) for k in resolved)
                 unique_name = f"{name}{count + 1}" if name in resolved else name
                 resolved[unique_name] = callback
@@ -182,8 +180,10 @@ class _CallbacksHandler:
         }
         rest = {k: v for k, v in self.callbacks.items() if k not in early}
 
-        ordered = {name: rest.pop(name) for name in PREFERRED_ORDER if name in rest}
-        ordered.update(dict(sorted(early.items())))
+        ordered = dict(sorted(early.items()))
+        ordered.update(
+            {name: rest.pop(name) for name in PREFERRED_ORDER if name in rest}
+        )
         ordered.update(rest)
 
         self.callbacks = ordered
@@ -200,7 +200,7 @@ class _CallbacksHandler:
         """
         return list(self.callbacks.keys())
 
-    def _call_event(self, event: str, config: _TrainingState, **kwargs) -> None:
+    def call_event(self, event: str, model: Model, maps: Maps, **kwargs) -> None:
         """
         Call a specific event method on all callbacks.
 
@@ -217,37 +217,6 @@ class _CallbacksHandler:
             if callable(method):
                 method(config=config, **kwargs)
 
-    # Event hooks
-    def on_train_begin(self, config: _TrainingState, **kwargs):
-        self._call_event("on_train_begin", config=config, **kwargs)
-
-    def on_train_end(self, config: _TrainingState, **kwargs):
-        self._call_event("on_train_end", config=config, **kwargs)
-
-    def on_epoch_begin(self, config: _TrainingState, **kwargs):
-        self._call_event("on_epoch_begin", config=config, **kwargs)
-
-    def on_epoch_end(self, config: _TrainingState, **kwargs):
-        self._call_event("on_epoch_end", config=config, **kwargs)
-
-    def on_batch_begin(self, config: _TrainingState, **kwargs):
-        self._call_event("on_batch_begin", config=config, **kwargs)
-
-    def on_batch_end(self, config: _TrainingState, **kwargs):
-        self._call_event("on_batch_end", config=config, **kwargs)
-
-    def on_backward_begin(self, config: _TrainingState, **kwargs):
-        self._call_event("on_backward_begin", config=config, **kwargs)
-
-    def on_backward_end(self, config: _TrainingState, **kwargs):
-        self._call_event("on_backward_end", config=config, **kwargs)
-
-    def on_validation_begin(self, config: _TrainingState, **kwargs):
-        self._call_event("on_validation_begin", config=config, **kwargs)
-
-    def on_validation_end(self, config: _TrainingState, **kwargs):
-        self._call_event("on_validation_end", config=config, **kwargs)
-
     def write_json(self, json_path: PathType) -> None:
         json_path = Path(json_path)
         json_dict = {
@@ -262,4 +231,5 @@ class _CallbacksHandler:
     def from_json(cls, json_path: PathType) -> List[Callback]:
         json_path = Path(json_path)
         _dict = read_json(json_path=json_path)
+
         return [get_callback_from_dict(json_dict) for json_dict in _dict.values()]

@@ -2,6 +2,8 @@ from enum import Enum
 
 
 class CaseInsensitiveEnum(str, Enum):
+    """Case insensitive Enum object."""
+
     @classmethod
     def _missing_(cls, value):
         if isinstance(value, str):
@@ -55,6 +57,15 @@ class SliceDirection(int, Enum):
     SAGITTAL = 0
     CORONAL = 1
     AXIAL = 2
+
+
+class PadMode(str, Enum):
+    "Padding mode."
+
+    CONSTANT = "constant"
+    REFLECT = "reflect"
+    REPLICATE = "replicate"
+    CIRCULAR = "circular"
 
 
 class SliceMode(str, Enum):

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Tuple, Union
 
 from pydantic import (
+    Field,
     NonNegativeFloat,
     NonNegativeInt,
     field_validator,
@@ -24,11 +25,18 @@ __all__ = [
 ]
 
 
-class TransformConfig(ObjectConfig):
+class TransformConfig(ObjectConfig["Transform"]):
     """Base config class for the transforms."""
 
     include: Optional[Sequence[str]] = None
     exclude: Optional[Sequence[str]] = None
+    copy_: bool = Field(default=False, alias="copy")
+
+    def get_object(self, **kwargs: Any) -> Transform:
+        associated_class = self._get_class()
+        return associated_class(
+            **self.to_dict(exclude=["name"])
+        )  # to_dict to have the alias here
 
     @model_validator(mode="after")
     def check_include_exclude(self):
@@ -40,18 +48,6 @@ class TransformConfig(ObjectConfig):
 
 class TorchioTransformConfig(TransformConfig):
     """Base config class for the transforms from TorchIO."""
-
-    def get_object(self) -> Transform:
-        """
-        Returns the transform associated to this configuration,
-        parametrized with the parameters passed by the user.
-
-        Returns
-        -------
-        Transform:
-            The associated transform.
-        """
-        return super().get_object()
 
     @classmethod
     def _get_class(cls) -> type[TorchioTransform]:

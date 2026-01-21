@@ -1,13 +1,16 @@
 import math
 from enum import Enum
 from logging import getLogger
+from pathlib import Path
 from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
+import torch
 
-from clinicadl.callbacks.training_state import _TrainingState
-from clinicadl.metrics.handler import Metrics
+from clinicadl.train.trainer_state import TrainerState
+from clinicadl.utils.dictionary.suffixes import JSON
+from clinicadl.utils.json import read_json, write_json
 
 from .base import Callback
 
@@ -70,7 +73,7 @@ class OneMetricEarlyStopping(Callback):
         """Return the function to compare current and best metric values."""
         if self.mode == Mode.MIN:
             return lambda value, best: value < best - self.min_delta
-        elif self.mode == Mode.MAX:
+        if self.mode == Mode.MAX:
             return lambda value, best: value > best + self.min_delta
         raise ValueError(f"Unknown mode: {self.mode}")
 
@@ -88,15 +91,16 @@ class OneMetricEarlyStopping(Callback):
             self.best = -np.inf
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
+
         self.num_bad_epochs = 0
 
-    def should_stop_training(self, config: _TrainingState, **kwargs) -> bool:
+    def should_stop_training(self, config: TrainerState) -> bool:
         """
         Check if training should stop at the end of an epoch.
 
         Parameters
         ----------
-        config : _TrainingState
+        config : TrainerState
             Current training state, must contain metrics DataFrame.
 
         Returns
@@ -105,6 +109,7 @@ class OneMetricEarlyStopping(Callback):
             True if training should stop, False otherwise.
         """
         df = config.metrics.df
+
         if df is None or not isinstance(df, pd.DataFrame) or df.empty:
             raise ValueError("Metrics DataFrame is missing or invalid.")
 
@@ -118,13 +123,12 @@ class OneMetricEarlyStopping(Callback):
             )
 
         value = df.at[config.epoch, self.metric]
-
         try:
             value = float(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as exc:
             raise ValueError(
                 f"Value for metric '{self.metric}' at epoch {config.epoch} is not numeric."
-            )
+            ) from exc
 
         if pd.isna(value):
             raise ValueError(
@@ -133,19 +137,27 @@ class OneMetricEarlyStopping(Callback):
 
         if self.check_finite and (math.isinf(value) or math.isnan(value)):
             logger.warning(
-                f"Metric '{self.metric}' value at epoch {config.epoch} is not finite. Stopping training."
+                "Metric '%s' value at epoch %s is not finite. Stopping training.",
+                self.metric,
+                config.epoch,
             )
             return True
 
         if self.upper_bound is not None and (value > self.upper_bound):
             logger.warning(
-                f"Metric '{self.metric}' value {value} exceeded upper bound {self.upper_bound}. Stopping training."
+                "Metric '%s' value %s  exceeded upper bound %s. Stopping training.",
+                self.metric,
+                value,
+                self.upper_bound,
             )
             return True
 
         if self.lower_bound is not None and value < self.lower_bound:
             logger.warning(
-                f"Metric '{self.metric}' value {value} fell below lower bound {self.lower_bound}. Stopping training."
+                "Metric '%s' value %s fell below lower bound %s. Stopping training.",
+                self.metric,
+                value,
+                self.lower_bound,
             )
             return True
 
@@ -155,19 +167,46 @@ class OneMetricEarlyStopping(Callback):
         else:
             self.num_bad_epochs += 1
             logger.debug(
-                f"No improvement in '{self.metric}' for {self.num_bad_epochs} epochs."
+                "No improvement in '%s' for %s epochs.",
+                self.metric,
+                self.num_bad_epochs,
             )
 
         if self.patience is not None and self.num_bad_epochs >= self.patience:
             logger.info(
-                f"Early stopping triggered on metric '{self.metric}' after {self.num_bad_epochs} epochs without improvement."
+                "Early stopping triggered on metric '%s' after %s epochs without improvement.",
+                self.metric,
+                self.num_bad_epochs,
             )
             return True
 
         return False
 
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Convert the callback to a dictionary representation.
 
-class EarlyStopping(Metrics, Callback):
+        Returns
+        -------
+        dict
+            Dictionary representation of the callback.
+        """
+        json_dict = super().to_dict()
+        json_dict.update(
+            {
+                "metrics": self.metric,
+                "patience": self.patience,
+                "min_delta": self.min_delta,
+                "mode": self.mode,
+                "check_finite": self.check_finite,
+                "upper_bound": self.upper_bound,
+                "lower_bound": self.lower_bound,
+            }
+        )
+        return json_dict
+
+
+class EarlyStopping(Callback):
     """
     Early stopping callback monitoring one or multiple metrics.
 
@@ -262,10 +301,10 @@ class EarlyStopping(Metrics, Callback):
         self.upper_bound = check_list(upper_bound)
         self.lower_bound = check_list(lower_bound)
 
-        self.early_config_list = []
+        self.early_stoppers: list[OneMetricEarlyStopping] = []
 
         for i, metric in enumerate(self.metrics):
-            self.early_config_list.append(
+            self.early_stoppers.append(
                 OneMetricEarlyStopping(
                     metric=metric,
                     patience=self.patience[i],
@@ -277,16 +316,16 @@ class EarlyStopping(Metrics, Callback):
                 )
             )
 
-    def on_epoch_end(self, config: _TrainingState, **kwargs) -> None:
+    def on_epoch_end(self, config: TrainerState, **kwargs) -> None:
         """
         Called at the end of each epoch.
 
         Updates `config.stop` to True if all monitored metrics meet early stopping criteria.
         """
-        should_stop = all(
-            metric.on_epoch_end(config=config, **kwargs)
-            for metric in self.early_config_list
-        )
+        should_stops = [
+            metric.should_stop_training(config) for metric in self.early_stoppers
+        ]
+        should_stop = all(should_stops)
         if should_stop:
             logger.info(
                 "Early stopping criteria met for all monitored metrics. Stopping training."
@@ -315,3 +354,30 @@ class EarlyStopping(Metrics, Callback):
             }
         )
         return json_dict
+
+    def save_checkpoint(
+        self,
+        checkpoint_path: Path,
+        **kwargs,
+    ) -> None:
+        """To save the state of the early stoppers."""
+        checkpoints = {}
+        for stopper in self.early_stoppers:
+            checkpoints[stopper.metric] = {
+                "best": stopper.best,
+                "num_bad_epochs": stopper.num_bad_epochs,
+            }
+        filename = checkpoint_path.with_suffix(JSON)
+        write_json(filename, checkpoints)
+
+    def load_checkpoint(
+        self,
+        checkpoint_path: Path,
+        **kwargs,
+    ) -> None:
+        """To load a checkpoint saved with 'save_checkpoint'."""
+        filename = checkpoint_path.with_suffix(JSON)
+        checkpoint: dict = read_json(filename)
+        for metric, stopper in zip(self.metrics, self.early_stoppers):
+            stopper.best = checkpoint[metric]["best"]
+            stopper.num_bad_epochs = checkpoint[metric]["num_bad_epochs"]

@@ -5,13 +5,6 @@
 
 .. automodule:: clinicadl.callbacks
 
-:mod:`clinicadl.callbacks.factory`
-----------------------------------
-
-.. automodule:: clinicadl.callbacks.factory
-
-.. currentmodule:: clinicadl.callbacks.factory
-
 .. autosummary::
    :toctree: ../generated/
    :nosignatures:
@@ -20,11 +13,10 @@
     Callback
     Checkpoint
     CodeCarbon
-    Comet
     EarlyStopping
     LRScheduler
     MLflow
     ModelSelection
-    Tensorboard
+    TensorBoard
     WandB
 

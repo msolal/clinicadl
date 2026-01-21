@@ -1,12 +1,51 @@
-import copy
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Sequence, Union
+from typing import Any, Optional, Sequence, Union
 
+import numpy as np
+import torch
 import torchio as tio
+from numpy.typing import NDArray
+from pydantic import field_validator
+from torch import Tensor
 
+from clinicadl.utils.config import ClinicaDLConfig
 from clinicadl.utils.typing import PathType
+from clinicadl.utils.variables import SPACING_RTOL
 
-from .label import LabelType
+ArrayLikeInt = Union[Sequence[int], NDArray[np.integer]]
+ArrayLikeFloat = Union[Sequence[float], NDArray[np.floating]]
+LabelType = Union[
+    int,
+    ArrayLikeInt,
+    float,
+    ArrayLikeFloat,
+    tio.LabelMap,
+]
+
+
+class DataPointConfig(ClinicaDLConfig):
+    """To check ``DataPoint`` inputs."""
+
+    image: tio.ScalarImage
+    label: Optional[LabelType]
+    participant: str
+    session: str
+
+    @field_validator("image", mode="before")
+    @classmethod
+    def _validate_image(cls, value: Any) -> Any:
+        """Loads the image if it is a path."""
+        if isinstance(value, (Path, str)):
+            return tio.ScalarImage(path=value)
+        return value
+
+    @field_validator("label", mode="before")
+    @classmethod
+    def _validate_label(cls, value: Any) -> Any:
+        """Loads the label if it is a path."""
+        if isinstance(value, (Path, str)):
+            return tio.LabelMap(path=value)
+        return value
 
 
 class DataPoint(tio.Subject):
@@ -14,12 +53,12 @@ class DataPoint(tio.Subject):
     Data structure that gathers an image, the associated label, and any other relevant information
     associated to the image.
 
-    It inherits from :py:class:`torchio.Subject`.
+    It inherits from :py:class:`torchio.Subject`, which inherits itself from Python's ``dict``.
 
     A DataPoint has the following attributes:
         - ``image``: the image, as a :py:class:`torchio.ScalarImage`;
-        - ``label``: the label. Either a scalar or a mask, as a :py:class:`torchio.LabelMap`;
-        - ``participant``: the id of the subject, as a ``str``;
+        - ``label``: the label. Either ``None``, a scalar, a sequence of scalars, or a mask (as a :py:class:`torchio.LabelMap`);
+        - ``participant``: the id of the participant, as a ``str``;
         - ``session``: the id of the session, as a ``str``.
 
     You can easily access these elements using the attribute notation:
@@ -35,16 +74,18 @@ class DataPoint(tio.Subject):
         >>> datapoint.session
         'ses-M000'
 
-    Besides, a ``DataPoint`` is dictionary-like object. So, you can easily add a key-value pair
-    to it:
+    However, **use the attribute notation only to access an attribute**.
+    To modify, add, or delete a field, use the standard dictionary syntax:
 
     .. code-block:: python
 
         >>> datapoint["age"] = 55
-        >>> datapoint["age"]    # the attribute notation won't work here
+        >>> datapoint["age"]
+        55
+        >>> datapoint.age
         55
 
-    However, to add an image or a mask to the ``DataPoint``, prefer :py:func:`~add_image`
+    To add an image or a mask to the ``DataPoint``, prefer :py:func:`~add_image`
     and :py:func:`~add_mask`.
 
     To get all the images in your DataPoint, you can use :py:func:`get_images` or :py:func:`get_images_dict`.
@@ -64,20 +105,21 @@ class DataPoint(tio.Subject):
     Parameters
     ----------
     image : Union[torchio.ScalarImage, PathType]
-        The image, as a :py:class:`torchio.ScalarImage` or a ``path`` to a NIfTI file.
-    label : Optional[Union[float, int, dict[str, float], tio.LabelMap, PathType]]
-        The label associated to the image. Can be:
-
-        - a ``float`` (regression);
-        - a ``dictionary`` with ``strings`` for keys and ``floats`` for values (multi-output regression);
-        - an ``int`` (classification, including multi-class classification),
-        - a mask, passed as a :py:class:`torchio.LabelMap` or a ``path`` to a NIfTI file, (segmentation);
-        - or ``None``, if no label (reconstruction).
-
+        The image, as a :py:class:`torchio.ScalarImage` or a ``path`` to a file.
     participant : str
         The participant concerned.
     session : str
         The session concerned.
+    label : Optional[Union[int, float, ArrayLikeInt, ArrayLikeFloat, tio.LabelMap, PathType]], default=None
+        The label associated to the image. Can be:
+
+        - an ``int`` (classification, including multi-class classification);
+        - a ``sequence`` or (:numpy:`ndarray`) of ``int`` (multi-label classification);
+        - a ``float`` (regression);
+        - a ``sequence`` or (:numpy:`ndarray`) of ``float`` (multi-output regression);
+        - a mask, passed as a :py:class:`torchio.LabelMap` or a ``path`` to a file, (segmentation);
+        - or ``None``, if no label (reconstruction).
+
     kwargs : Any
         Any other information to store in the DataPoint.
     """
@@ -90,24 +132,20 @@ class DataPoint(tio.Subject):
     def __init__(
         self,
         image: Union[tio.ScalarImage, PathType],
-        label: Optional[Union[float, int, dict[str, float], tio.LabelMap, PathType]],
         participant: str,
         session: str,
+        label: Optional[Union[LabelType, PathType]] = None,
         **kwargs: Any,
     ) -> None:
-        if isinstance(image, (Path, str)):
-            image = tio.ScalarImage(path=image)
-
-        if isinstance(label, (Path, str)):
-            label = tio.LabelMap(path=label)
-
-        super().__init__(
+        config = DataPointConfig(
             image=image,
             label=label,
             participant=participant,
             session=session,
-            **kwargs,
         )
+        kwargs.update(config.to_raw_dict())
+
+        super().__init__(**kwargs)
 
     @property
     def shape(self):
@@ -157,7 +195,7 @@ class DataPoint(tio.Subject):
         >>> datapoint.spacing
         (1.0, 1.0, 1.0)
         """
-        self.check_consistent_attribute("spacing", relative_tolerance=1e-3)
+        self.check_consistent_attribute("spacing", relative_tolerance=SPACING_RTOL)
         return tuple(float(s) for s in self.image.spacing)
 
     @property
@@ -208,7 +246,7 @@ class DataPoint(tio.Subject):
 
         Examples
         --------
-        >>> from clinicadl.data.structures import ColinDataPoint
+        >>> from clinicadl.data.structures.examples import ColinDataPoint
         >>> datapoint = ColinDataPoint()
         >>> datapoint.get_images()
         [ScalarImage(shape: (1, 181, 217, 181); spacing: (1.00, 1.00, 1.00); orientation: RAS+; path: ...)]
@@ -250,7 +288,7 @@ class DataPoint(tio.Subject):
 
         Examples
         --------
-        >>> from clinicadl.data.structures import ColinDataPoint
+        >>> from clinicadl.data.structures.examples import ColinDataPoint
         >>> datapoint = ColinDataPoint()
         >>> datapoint.get_images_dict()
         {'image': ScalarImage(shape: (1, 181, 217, 181); spacing: (1.00, 1.00, 1.00); orientation: RAS+; path: ...)}
@@ -261,22 +299,47 @@ class DataPoint(tio.Subject):
         """
         return super().get_images_dict(intensity_only, include, exclude)
 
+    def get_image_tensor(self, image_name: str) -> Tensor:
+        """
+        Returns a copy of the tensor associated to a field that is a :py:class:`torchio.Image`.
+
+        Parameters
+        ----------
+        image_name : str
+            The name of the image in the ``DataPoint``.
+
+        Returns
+        -------
+        torch.Tensor
+            The tensor image.
+        """
+        if not isinstance(field_value := self[image_name], tio.Image):
+            raise TypeError(
+                f"{image_name} is a {type(field_value)}, not a torchio.Image!"
+            )
+
+        return field_value.tensor.clone()
+
     def add_image(
-        self, image: Union[tio.ScalarImage, PathType], image_name: str
+        self,
+        image: Union[tio.ScalarImage, PathType, torch.Tensor],
+        image_name: str,
     ) -> None:
         """
         To add an image to the ``DataPoint``.
 
         Parameters
         ----------
-        image : Union[tio.ScalarImage, PathType]
-            The image to add, as a :py:class:`torchio.ScalarImage` or a ``path`` to a NIfTI file.
+        image : Union[tio.ScalarImage, PathType, torch.Tensor]
+            The image to add, as a :py:class:`torchio.ScalarImage``, a path to the file containing the image,
+            or a 4D :py:class:`torch.Tensor` (including one channel dimension). If a ``Tensor`` is passed, the same affine matrix as ``"image"``
+            will be used.
         image_name : str
-            The name that the image will take in the DataPoint.
+            The name that the image will take in the ``DataPoint``.
 
         Examples
         --------
-        >>> from clinicadl.data.structures import ColinDataPoint
+        >>> from clinicadl.data.structures.examples import ColinDataPoint
         >>> datapoint = ColinDataPoint()
         >>> datapoint
         ColinDataPoint(Keys: ('image', 'label', 'participant', 'session', 'head'); images: 3)
@@ -292,22 +355,29 @@ class DataPoint(tio.Subject):
         """
         if isinstance(image, (Path, str)):
             image = tio.ScalarImage(path=image)
+        elif isinstance(image, torch.Tensor):
+            image = tio.ScalarImage(tensor=image, affine=self.image.affine)
+
         super().add_image(image, image_name)
 
-    def add_mask(self, mask: Union[tio.LabelMap, PathType], mask_name: str) -> None:
+    def add_mask(
+        self, mask: Union[tio.ScalarImage, PathType, torch.Tensor], mask_name: str
+    ) -> None:
         """
         To add a mask to the ``DataPoint``.
 
         Parameters
         ----------
-        mask : Union[tio.LabelMap, PathType]
-            The mask to add, as a :py:class:`torchio.LabelMap` or a ``path`` to a NIfTI file.
+        mask : Union[tio.ScalarImage, PathType, torch.Tensor]
+            The mask to add, as a :py:class:`torchio.LabelMap`, a path to the file containing the image,
+            or a 4D :py:class:`torch.Tensor` (including one channel dimension). If a ``Tensor`` is passed, the same affine matrix as ``"image"``
+            will be used.
         mask_name : str
             The name that the mask will take in the ``DataPoint``.
 
         Examples
         --------
-        >>> from clinicadl.data.structures import ColinDataPoint
+        >>> from clinicadl.data.structures.examples import ColinDataPoint
         >>> datapoint = ColinDataPoint()
         >>> datapoint
         ColinDataPoint(Keys: ('image', 'label', 'participant', 'session', 'head'); images: 3)
@@ -323,6 +393,9 @@ class DataPoint(tio.Subject):
         """
         if isinstance(mask, (Path, str)):
             mask = tio.LabelMap(path=mask)
+        elif isinstance(mask, torch.Tensor):
+            mask = tio.LabelMap(tensor=mask, affine=self.image.affine)
+
         super().add_image(mask, mask_name)
 
     def get_applied_transforms(
@@ -338,7 +411,7 @@ class DataPoint(tio.Subject):
 
         Examples
         --------
-        >>> from clinicadl.data.structures import ColinDataPoint
+        >>> from clinicadl.data.structures.examples import ColinDataPoint
         >>> from torchio import RescaleIntensity
         >>> datapoint = ColinDataPoint()
         >>> transform = RescaleIntensity()
@@ -356,26 +429,15 @@ class DataPoint(tio.Subject):
         """
         super().plot(**kwargs)
 
-    def __copy__(self):
-        return _subject_copy_helper(self, DataPoint)
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.update_attributes()
 
+    def __delitem__(self, key):
+        super().__delitem__(key)
+        if hasattr(self, key):
+            delattr(self, key)
 
-def _subject_copy_helper(
-    old_obj: DataPoint,
-    new_subj_cls: Callable[[Dict[str, Any]], DataPoint],
-):
-    """
-    Adapted from torchio.data.subject._subject_copy_helper to work
-    with DataPoint.
-    """
-    result_dict = {}
-    for key, value in old_obj.items():
-        if isinstance(value, tio.Image):
-            value = copy.copy(value)
-        else:
-            value = copy.deepcopy(value)
-        result_dict[key] = value
-
-    new = new_subj_cls(**result_dict)
-    new.applied_transforms = old_obj.applied_transforms[:]
-    return new
+    def remove_image(self, image_name: str) -> None:
+        self._check_image_name(image_name)
+        del self[image_name]

@@ -4,5 +4,4 @@ from typing import Union
 import pandas as pd
 
 PathType = Union[Path, str]
-
-DataType = Union[PathType, pd.DataFrame]
+DataFrameType = Union[PathType, pd.DataFrame]

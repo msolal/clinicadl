@@ -1,35 +1,66 @@
-from __future__ import annotations
-
 from abc import abstractmethod
-from typing import Any, Dict, Optional
+from logging import getLogger
+from typing import Any, Optional, Sequence, Union
 
-import monai
 import monai.metrics
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator
 
-from clinicadl.losses.enum import Reduction
-from clinicadl.losses.types import Loss
+from clinicadl.transforms.handlers import Postprocessing
+from clinicadl.transforms.types import TransformOrConfig
 from clinicadl.utils.config import ClinicaDLConfig, ObjectConfig
+from clinicadl.utils.dictionary.words import LABEL, OUTPUT
 
-from .enum import Optimum
+from ..base import Metric
+from ..enum import Optimum
+from ..monai_wrapper import MonaiMetricWrapper
 
-__all__ = ["MetricConfig", "LossMetricConfig"]
+__all__ = ["MetricConfig"]
+
+logger = getLogger("clinicadl.metrics")
 
 
-class MetricConfig(ObjectConfig):
+class MetricConfig(ObjectConfig[Metric]):
     """Base config class to configure metrics."""
 
-    def get_object(self) -> monai.metrics.metric.CumulativeIterationMetric:
+    pred_key: str = OUTPUT
+    label_key: Optional[str] = LABEL
+    postprocessing: Union[list[TransformOrConfig], Postprocessing] = Field(
+        default=[], reader=Postprocessing.from_dict
+    )
+
+    def get_object(self, **kwargs: Any) -> Metric:
         """
         Returns the metric associated to this configuration,
         parametrized with the parameters passed by the user.
 
         Returns
         -------
-        monai.metrics.Metric:
-            The MONAI metric.
+        Metric:
+            The associated metric.
         """
-        return super().get_object()
+        monai_metric = self._get_class()(
+            **self.to_raw_dict(exclude={"pred_key", "label_key", "postprocessing"})
+        )
+        metric = MonaiMetricWrapper(
+            monai_metric,
+            pred_key=self.pred_key,
+            label_key=self.label_key,
+            optimum=self.optimum(),
+            postprocessing=self.postprocessing,
+        )
+        return metric
+
+    @field_validator("postprocessing", mode="after")
+    @classmethod
+    def _validate_postprocessing(
+        cls, postprocessing: Union[Sequence[TransformOrConfig], Postprocessing]
+    ) -> Postprocessing:
+        """
+        Puts postprocessing transforms in a Postprocessing object.
+        """
+        if isinstance(postprocessing, list):
+            return Postprocessing(postprocessing)
+        return postprocessing
 
     @classmethod
     def _get_class(cls) -> type[monai.metrics.metric.CumulativeIterationMetric]:
@@ -55,37 +86,3 @@ class _GetNotNansConfig(ClinicaDLConfig):
         ), "'get_not_nans' currently not supported in ClinicaDL. Please leave to False."
 
         return v
-
-
-class LossMetricConfig(MetricConfig):
-    "Config class to use the loss as a metric."
-
-    loss_fn: Loss
-    reduction: Optional[Reduction] = None
-
-    @staticmethod
-    def optimum() -> Optimum:
-        """The optimum of the metric."""
-        return Optimum.MIN
-
-    @model_validator(mode="after")
-    def check_reduction(self):
-        """If 'reduction' is None, the reduction method of the loss function will be used."""
-        if self.reduction is None:
-            try:
-                self.reduction = self.loss_fn.reduction
-            except AttributeError as exc:
-                raise ValueError(
-                    "If the loss function doesn't have an attribute 'reduction', you must pass a reduction method to "
-                    "use the loss as a metric."
-                ) from exc
-
-        return self
-
-    def to_dict(self) -> Dict[str, Any]:
-        from clinicadl.utils.json import serialize_callable
-
-        my_dict = super().to_dict()
-        my_dict["loss_fn"] = serialize_callable(self.loss_fn)
-
-        return my_dict

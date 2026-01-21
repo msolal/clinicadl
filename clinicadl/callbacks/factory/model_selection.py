@@ -1,16 +1,13 @@
 import shutil
 from typing import Any, Union
 
-from clinicadl.callbacks.training_state import _TrainingState
-from clinicadl.dictionary.suffixes import PTH, TAR
-from clinicadl.dictionary.words import CHECKPOINT, MODEL, OPTIMIZER
-from clinicadl.metrics.config.enum import Optimum
-from clinicadl.metrics.handler import Metrics
+from clinicadl.metrics.enum import Optimum
+from clinicadl.train.trainer_state import TrainerState
 
 from .base import Callback
 
 
-class ModelSelection(Callback, Metrics):
+class ModelSelection(Callback):
     """
     Callback that manages model checkpoint selection based on specified metrics.
 
@@ -78,7 +75,7 @@ class ModelSelection(Callback, Metrics):
         """
         self.metrics = metrics if isinstance(metrics, list) else [metrics]
 
-    def on_train_begin(self, config: _TrainingState, **kwargs) -> None:
+    def on_train_begin(self, config: TrainerState, **kwargs) -> None:
         """
         Initialize storage structures for best metrics and create necessary folders.
         """
@@ -90,7 +87,7 @@ class ModelSelection(Callback, Metrics):
             )
         # config.split.write_json(config.maps.training.splits[config.split.index].caps_dataset_json)
 
-    def on_epoch_end(self, config: _TrainingState, **kwargs) -> None:
+    def on_epoch_end(self, config: TrainerState, **kwargs) -> None:
         """
         At each epoch, check whether any metric has improved. If so, copy the current
         model and optimizer checkpoints into the best directory for that metric.
@@ -121,10 +118,11 @@ class ModelSelection(Callback, Metrics):
                     )
                 )
             ):
-                tmp_dir = config.maps.training.splits[config.split.index].tmp
+                tmp_dir = config.maps.training.splits[config.split.index].tmp.epochs[
+                    config.epoch
+                ]
 
                 shutil.copyfile(tmp_dir.model, metric_dir.model)
-                shutil.copyfile(tmp_dir.optimizer, metric_dir.optimizer)
 
     def to_dict(self) -> dict[str, Any]:
         """

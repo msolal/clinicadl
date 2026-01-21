@@ -9,6 +9,7 @@ from clinicadl.optim.optimizers.config import (
     AdadeltaConfig,
     AdagradConfig,
     AdamConfig,
+    ImplementedOptimizer,
     RMSpropConfig,
     SGDConfig,
 )
@@ -142,14 +143,6 @@ def test_good_inputs(args: dict, configs):
                 assert getattr(c, arg) == {"group_1": value, "ELSE": value}
 
 
-def test_get_all_groups():
-    c = SGDConfig(
-        lr={"params1": 0.1, "params3": 0.7, "ELSE": 0.2},
-        weight_decay={"params2": 0.3, "ELSE": 0.5},
-    )
-    assert c.get_all_groups() == {"params1", "params2", "params3", "ELSE"}
-
-
 def test_get_check_else():
     with pytest.raises(ValidationError):
         SGDConfig(lr={"params1": 0.1, "ELSE": 0.2}, nesterov={"params2": False})
@@ -247,3 +240,10 @@ def test_get_object(config, expected_class, network):
             assert param.requires_grad
         for param in network.dense1.parameters():
             assert param.requires_grad
+
+
+def test_name():
+    for name in ImplementedOptimizer:
+        config = globals()[f"{name.value}Config"]
+        c = config()
+        assert c.name == name.value

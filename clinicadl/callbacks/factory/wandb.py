@@ -3,9 +3,9 @@ from typing import Union
 
 import pandas as pd
 
-from clinicadl.callbacks.training_state import _TrainingState
-from clinicadl.dictionary.suffixes import PTH, TAR
-from clinicadl.dictionary.words import MODEL, OPTIMIZER
+from clinicadl.train.trainer_state import TrainerState
+from clinicadl.utils.dictionary.suffixes import PTH, TAR
+from clinicadl.utils.dictionary.words import MODEL, OPTIMIZER
 
 from .base import Callback
 
@@ -21,7 +21,9 @@ class WandB(Callback):  # pragma: no cover
 
     Requirements
     ------------
+
         - The `wandb` package must be installed in your Python environment.
+
         You can install it with:
 
     .. code-block:: bash
@@ -29,6 +31,7 @@ class WandB(Callback):  # pragma: no cover
         pip install wandb
 
     .. note::
+
         - WandB supports local and cloud logging.
         - This callback is useful for reproducibility and experiment tracking.
 
@@ -69,7 +72,7 @@ class WandB(Callback):  # pragma: no cover
     def is_available() -> bool:
         return find_spec("wandb") is not None
 
-    def on_train_begin(self, config: _TrainingState, **kwargs) -> None:
+    def on_train_begin(self, config: TrainerState, **kwargs) -> None:
         # Optionally update config with hyperparameters from training config
         training_config = {}
         # Example: add learning rate or epochs if present
@@ -88,7 +91,7 @@ class WandB(Callback):  # pragma: no cover
             reinit=True,
         )
 
-    def on_epoch_end(self, config: _TrainingState, **kwargs) -> None:
+    def on_epoch_end(self, config: TrainerState, **kwargs) -> None:
         if config.metrics.df is not None and not config.metrics.df.empty:
             if config.epoch in config.metrics.df.index:
                 epoch_metrics = config.metrics.df.loc[config.epoch]
@@ -100,7 +103,7 @@ class WandB(Callback):  # pragma: no cover
                     }
                     self._wandb.log(log_dict, step=config.epoch)
 
-    def on_train_end(self, config: _TrainingState, **kwargs) -> None:
+    def on_train_end(self, config: TrainerState, **kwargs) -> None:
         tmp_dir = config.maps.training.splits[config.split.index].tmp
         model_file = tmp_dir.model
         optimizer_file = tmp_dir.optimizer

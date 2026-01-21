@@ -4,7 +4,6 @@
 ================================
 
 .. automodule:: clinicadl.data.structures
-    :no-index:
 
 .. currentmodule:: clinicadl.data.structures
 
@@ -14,4 +13,8 @@
     :template: autosummary/class.rst
 
     DataPoint
+    Sample
+    Sample2D
     ColinDataPoint
+    ColinSample
+    ColinSample2D

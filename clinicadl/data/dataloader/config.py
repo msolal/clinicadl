@@ -1,25 +1,26 @@
-from pathlib import Path
-from typing import Iterator, Optional, overload
+from __future__ import annotations
 
-from pydantic import NonNegativeInt, PositiveInt, model_validator
+from collections.abc import Sequence
+from typing import Any, Optional
+
+from pydantic import Field, NonNegativeInt, PositiveInt, model_validator
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch.utils.data import DistributedSampler, Sampler, WeightedRandomSampler
 
 from clinicadl.data.datasets import (
-    PairedDataset,
     UnpairedDataset,
 )
-from clinicadl.data.datasets.types import Dataset, SimpleDataset, TupleDataset
 from clinicadl.utils.config import ClinicaDLConfig
-from clinicadl.utils.json import update_json, write_json
 from clinicadl.utils.seed import pl_worker_init_function
 
-from .batch import Batch, simple_collate_fn, tuple_collate_fn
+from ..datasets import Dataset
+from .collate import CollateFn, ToBatchCollate, ToBatchesCollate
+from .collate.factory import get_collate_from_dict
 
 
 class DataLoader(TorchDataLoader):
     """
-    Overwrites :py:class:`torch.utils.data.DataLoader` only to add a `set_epoch` method.
+    Overwrites :py:class:`torch.utils.data.DataLoader` only to add a ``:py:meth:set_epoch` method.
     """
 
     def set_epoch(self, epoch: int) -> None:
@@ -36,33 +37,26 @@ class DataLoader(TorchDataLoader):
         """
         if isinstance(self.sampler, DistributedSampler):
             self.sampler.set_epoch(epoch)
-        if isinstance(self.dataset, UnpairedDataset):
-            self.dataset.set_epoch(epoch)
+        if hasattr(self.dataset, "set_epoch") and callable(
+            set_epoch := getattr(self.dataset, "set_epoch")
+        ):
+            set_epoch(epoch)
 
 
-class _SimpleDataLoader(DataLoader):
-    """To type the iterator."""
-
-    def __iter__(
-        self,
-    ) -> Iterator[Batch]:
-        return super().__iter__()
-
-
-class _TupleDataLoader(DataLoader):
-    """To type the iterator."""
-
-    def __iter__(
-        self,
-    ) -> Iterator[tuple[Batch, ...]]:
-        return super().__iter__()
+def _read_collate(serialized_collate: Any) -> Any:
+    """
+    To read the field 'collate_fn'.
+    """
+    if isinstance(serialized_collate, dict):
+        return get_collate_from_dict(serialized_collate)
+    return serialized_collate
 
 
 class DataLoaderConfig(ClinicaDLConfig):
     """
-    Configuration class to create a DataLoader.
+    Configuration class to create a ``DataLoader``.
 
-    **This object is the only type of DataLoader that will be accepted by other ClinicaDL objects.**
+    **This object is the only type of DataLoader that will be accepted by ClinicaDL.**
     So, ``ClinicaDL`` won't work with a raw :py:class:`PyTorch DataLoader <torch.utils.data.DataLoader>`.
 
     Nevertheless, if you want to access the underlying :py:class:`PyTorch DataLoader <torch.utils.data.DataLoader>`,
@@ -71,7 +65,7 @@ class DataLoaderConfig(ClinicaDLConfig):
     Parameters
     ----------
     batch_size : PositiveInt, default=1
-        Batch size for the DataLoader.
+        Batch size for the ``DataLoader``.
     sampling_weights : Optional[str], default=None
         Name of the column in the DataFrame of the :py:mod:`ClinicaDL dataset <clinicadl.data.datasets>` where to find the sampling
         weights. The column must contain ``float`` values.
@@ -101,6 +95,8 @@ class DataLoaderConfig(ClinicaDLConfig):
     persistent_workers : bool, default=False
         Whether to maintain the worker processes alive at the end of an epoch.
         Can't be passed if ``num_workers=0``.
+    collate_fn : Optional[CollateFn], default=None
+        To customize the way samples are collated into batches. See :py:mod:`clinicadl.data.dataloader.collate`.
 
     Raises
     ------
@@ -122,9 +118,10 @@ class DataLoaderConfig(ClinicaDLConfig):
     drop_last: bool = False
     prefetch_factor: Optional[NonNegativeInt] = None
     persistent_workers: bool = False
+    collate_fn: Optional[CollateFn] = Field(default=None, reader=_read_collate)
 
     @model_validator(mode="after")
-    def validate_worker_parameters(self):
+    def _validate_worker_parameters(self):
         """Checks that 'prefetch_factor' is None if 'num_workers' = 0."""
         if self.num_workers == 0 and self.prefetch_factor:
             raise ValueError(
@@ -138,24 +135,6 @@ class DataLoaderConfig(ClinicaDLConfig):
             )
         return self
 
-    @overload
-    def get_object(
-        self,
-        dataset: SimpleDataset,
-        dp_degree: Optional[int] = None,
-        rank: Optional[int] = None,
-    ) -> _SimpleDataLoader:
-        """:noindex:"""
-
-    @overload
-    def get_object(
-        self,
-        dataset: TupleDataset,
-        dp_degree: Optional[int] = None,
-        rank: Optional[int] = None,
-    ) -> _TupleDataLoader:
-        """:noindex:"""
-
     def get_object(
         self,
         dataset: Dataset,
@@ -163,31 +142,13 @@ class DataLoaderConfig(ClinicaDLConfig):
         rank: Optional[int] = None,
     ) -> DataLoader:
         """
-        To get a :py:class:`PyTorch DataLoader <torch.utils.data.DataLoader>` from a dataset
-        :py:mod:`ClinicaDL dataset <clinicadl.data.datasets>`. The dataloader is parametrized
+        To get a :py:class:`PyTorch DataLoader <torch.utils.data.DataLoader>` from a
+        :py:mod:`ClinicaDL dataset <clinicadl.data.datasets>`. The ``DataLoader`` is parametrized
         with the options stored in this configuration class.
 
-        The output of the iterator is a list of :py:class:`~clinicadl.data.structures.DataPoint`
-        returned by the underlying :py:class:`~clinicadl.data.datasets.CapsDataset` (or a tuple
-        of lists of :py:class:`~clinicadl.data.structures.DataPoint` if the dataset is a
-        :py:class:`~clinicadl.data.datasets.PairedDataset` or an :py:class:`~clinicadl.data.datasets.UnpairedDataset`
-        - see examples).
-
-        This list has special methods ``get_images`` and ``get_labels`` to get :py:class:`torch.Tensor` instead
-        of ``DataPoint``:
-
-        .. code-block:: python
-
-            dataloader = dataloader_config.get_object(caps_dataset)
-            for batch in dataloader:
-                images = batch.get_images()
-                labels = batch.get_labels()
-
-        .. note::
-            - ``batch.get_images()`` will return the batch of images as a unique :py:class:`torch.Tensor` if all the images
-              in the batch have the **same size**, otherwise it will return a list of :py:class:`torch.Tensor`.
-            - ``batch.get_labels()`` will return the batch of labels as a unique :py:class:`torch.Tensor` if all
-              the labels in the batch are **homogeneous** (e.g. all scalars, or all images of same size).
+        The output of the iterator is a :py:class:`~clinicadl.data.dataloader.Batch`, or a tuple
+        :py:class:`~clinicadl.data.dataloader.Batch` if the dataset is a
+        :py:class:`~clinicadl.data.datasets.PairedDataset` or an :py:class:`~clinicadl.data.datasets.UnpairedDataset`.
 
         Parameters
         ----------
@@ -258,8 +219,8 @@ class DataLoaderConfig(ClinicaDLConfig):
             from clinicadl.data.dataloader import DataLoaderConfig
 
             caps_dataset = CapsDataset(
-                caps_directory="mycaps",
-                preprocessing=PETLinear(
+                directory="mycaps",
+                datatype=PETLinear(
                     tracer="18FAV45", use_uncropped_image=True, suvr_reference_region="pons2"
                 ),
                 data="mycaps/data.tsv",
@@ -275,42 +236,15 @@ class DataLoaderConfig(ClinicaDLConfig):
 
             >>> batch = next(iter(dataloader))
             >>> batch
-            [DataPoint(Keys: ('image', 'label', 'participant', 'session', 'image_path', 'preprocessing', 'extraction'); images: 1),
-             DataPoint(Keys: ('image', 'label', 'participant', 'session', 'image_path', 'preprocessing', 'extraction'); images: 1),
-             DataPoint(Keys: ('image', 'label', 'participant', 'session', 'image_path', 'preprocessing', 'extraction'); images: 1)]
-            >>> batch[0]
-            DataPoint(Keys: ('image', 'label', 'participant', 'session', 'image_path', 'preprocessing', 'extraction'); images: 1)
-
-        We have a list of three ``DataPoints`` (``batch_size=3``). However, if you want to pass your images to a neural network, you need tensors.
-        To get them, you can call ``get_images`` and ``get_labels``:
-
-        .. code-block:: python
-
-            >>> images = batch.get_images()
-            >>> type(images)
-            list    # here, the images don't have the same shape, so the list of images cannot be converted to a single tensor
-            >>> images[0].shape
-            torch.Size([1, 222, 312, 234])
-            >>> images[1].shape
-            torch.Size([1, 220, 312, 234])
-
-            >>> batch.get_labels()
-            tensor([55., 55., 62.])
+            [Sample(Keys: ('datatype', 'image_path', 'sample_type', 'sample_position', 'image', 'label', 'participant', 'session'); images: 1),
+             Sample(Keys: ('datatype', 'image_path', 'sample_type', 'sample_position', 'image', 'label', 'participant', 'session'); images: 1),
+             Sample(Keys: ('datatype', 'image_path', 'sample_type', 'sample_position', 'image', 'label', 'participant', 'session'); images: 1)]
 
         Now, let's see what happens with a :py:class:`~clinicadl.data.datasets.PairedDataset`:
 
         .. code-block:: python
 
-            caps_dataset_no_label = CapsDataset(
-                caps_directory="mycaps",
-                preprocessing=PETLinear(
-                    tracer="18FAV45", use_uncropped_image=True, suvr_reference_region="pons2"
-                ),
-                data="mycaps/data.tsv",
-            )
-            caps_dataset_no_label.read_tensor_conversion()
-
-            paired_dataset = PairedDataset([caps_dataset, caps_dataset_no_label]
+            paired_dataset = PairedDataset([caps_dataset, caps_dataset])
 
             dataloader = dataloader_config.get_object(paired_dataset)
 
@@ -318,22 +252,15 @@ class DataLoaderConfig(ClinicaDLConfig):
 
             >>> batch = next(iter(dataloader))
             >>> batch
-            ([DataPoint(Keys: ('image', 'label', 'participant', 'session', 'image_path', 'preprocessing', 'extraction'); images: 1),
-              DataPoint(Keys: ('image', 'label', 'participant', 'session', 'image_path', 'preprocessing', 'extraction'); images: 1),
-              DataPoint(Keys: ('image', 'label', 'participant', 'session', 'image_path', 'preprocessing', 'extraction'); images: 1)],
-             [DataPoint(Keys: ('image', 'label', 'participant', 'session', 'image_path', 'preprocessing', 'extraction'); images: 1),
-              DataPoint(Keys: ('image', 'label', 'participant', 'session', 'image_path', 'preprocessing', 'extraction'); images: 1),
-              DataPoint(Keys: ('image', 'label', 'participant', 'session', 'image_path', 'preprocessing', 'extraction'); images: 1)])
+            ([Sample(Keys: ('datatype', 'image_path', 'sample_type', 'sample_position', 'image', 'label', 'participant', 'session'); images: 1),
+              Sample(Keys: ('datatype', 'image_path', 'sample_type', 'sample_position', 'image', 'label', 'participant', 'session'); images: 1),
+              Sample(Keys: ('datatype', 'image_path', 'sample_type', 'sample_position', 'image', 'label', 'participant', 'session'); images: 1)],
+             [Sample(Keys: ('datatype', 'image_path', 'sample_type', 'sample_position', 'image', 'label', 'participant', 'session'); images: 1),
+              Sample(Keys: ('datatype', 'image_path', 'sample_type', 'sample_position', 'image', 'label', 'participant', 'session'); images: 1),
+              Sample(Keys: ('datatype', 'image_path', 'sample_type', 'sample_position', 'image', 'label', 'participant', 'session'); images: 1)])
 
-        We have a tuple of :math:`n` batches, where :math:`n` is the number of datasets that we paired.
-        We can still call ``get_images`` and ``get_labels`` on these batches:
-
-        .. code-block:: python
-
-            >>> batch[0].get_labels()
-            tensor([55., 55., 62.])     # from caps_dataset
-            >>> batch[1].get_labels()
-            [None, None, None]          # from caps_dataset_no_label
+        Because, the default behavior is to use :py:class:`~clinicadl.data.dataloader.ToBatchesCollate` to collate batches,
+        we obtain here a tuple of :math:`n` batches, where :math:`n` is the number of datasets that we paired.
         """
         if (rank is not None and dp_degree is None) or (
             dp_degree is not None and rank is None
@@ -353,14 +280,20 @@ class DataLoaderConfig(ClinicaDLConfig):
                 f"dp_degree={dp_degree} and rank={rank}"
             )
 
+        if self.collate_fn:
+            collate_fn = self.collate_fn
+        else:
+            if isinstance(dataset[0], Sequence):
+                collate_fn = ToBatchesCollate()
+            else:
+                collate_fn = ToBatchCollate()
+
         return DataLoader(
             dataset=dataset,
             sampler=self._generate_sampler(dataset, dp_degree, rank),
             worker_init_fn=pl_worker_init_function,
-            collate_fn=tuple_collate_fn
-            if isinstance(dataset, (PairedDataset, UnpairedDataset))
-            else simple_collate_fn,
-            **self.to_dict(exclude={"sampling_weights", "shuffle"}),
+            collate_fn=collate_fn,
+            **self.to_dict(exclude={"sampling_weights", "shuffle", "collate_fn"}),
         )
 
     def _generate_sampler(
@@ -415,9 +348,3 @@ class DataLoaderConfig(ClinicaDLConfig):
             ) from exc
 
         return weights
-
-    def write_json(self, json_path: Path, name: str) -> None:
-        if json_path.is_file():
-            update_json(json_path=json_path, new_data={name: self.to_dict()})
-        else:
-            write_json(json_path=json_path, data={name: self.to_dict()})

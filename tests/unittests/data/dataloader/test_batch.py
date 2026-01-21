@@ -3,13 +3,34 @@ import pytest
 import torch
 import torchio as tio
 
-from clinicadl.data.dataloader.batch import Batch, simple_collate_fn, tuple_collate_fn
-from clinicadl.data.structures import DataPoint
+from clinicadl.data.dataloader.batch import Batch
+from clinicadl.data.datatypes import T1Linear
+from clinicadl.data.structures import DataPoint, Sample, Sample2D
 
 
 def test_init():
     with pytest.raises(ValueError, match="The batch is empty!"):
         Batch([])
+
+
+def test_typing():
+    datapoint = DataPoint(
+        image=tio.ScalarImage(tensor=torch.randn(1, 3, 4, 5)),
+        participant="abc",
+        session="abc",
+    )
+    batch = Batch([datapoint, datapoint])
+    assert batch[0].participant == "abc"
+
+    datapoint = Sample(
+        image=tio.ScalarImage(tensor=torch.randn(1, 3, 4, 5)),
+        participant="abc",
+        session="abc",
+        image_path="abc.nii.gz",
+        datatype=T1Linear(),
+    )
+    batch = Batch([datapoint, datapoint])
+    assert str(batch[0].image_path[0]) == "abc.nii.gz"
 
 
 def test_get_field():
@@ -30,55 +51,49 @@ def test_get_field():
     assert labels.size() == (2, 1, 3, 4, 5)
 
     # tensors and different shapes
-    batch[-1] = DataPoint(
+    batch[1] = DataPoint(
         image=tio.ScalarImage(tensor=torch.randn(1, 3, 4, 6)),
-        label=torch.ones(1, 3, 4, 6),
+        label=tio.LabelMap(tensor=torch.ones(1, 3, 4, 6)),
         participant="sub-1",
         session="ses-1",
     )
     labels = batch.get_field("label")
     images = batch.get_field("image")
     assert isinstance(images, list)
-    assert isinstance(images[0], tio.ScalarImage)
-    assert isinstance(images[-1], tio.ScalarImage)
+    assert images[0].size() == torch.Size((1, 3, 4, 5))
+    assert images[1].size() == torch.Size((1, 3, 4, 6))
     assert isinstance(labels, list)
-    assert isinstance(labels[0], tio.LabelMap)
-    assert labels[-1].size() == (1, 3, 4, 6)
+    assert labels[0].size() == torch.Size((1, 3, 4, 5))
 
     # numpy and list
     batch[0]["label"] = np.ones((1, 3, 4, 5)).tolist()
-    batch[-1]["label"] = np.ones((1, 3, 4, 5))
+    batch[1]["label"] = np.ones((1, 3, 4, 5))
     labels = batch.get_field("label")
     assert labels.size() == (2, 1, 3, 4, 5)
 
     # None
-    batch[-1]["label"] = None
+    batch[1]["label"] = None
     labels = batch.get_field("label")
     assert isinstance(labels, list)
-    assert isinstance(labels[0], list)
-    assert labels[-1] is None
+    assert labels[0].size() == torch.Size((1, 3, 4, 5))
+    assert labels[1] is None
 
-    # dict
-    batch[0]["label"] = {"A": 0.0, "B": 1.0}
-    batch[-1]["label"] = {"A": 2.0, "B": 3.0}
-    labels = batch.get_field("label")
-    torch.testing.assert_close(
-        labels, torch.tensor([[0.0, 1.0], [2.0, 3.0]], dtype=torch.float32)
-    )
-
-    batch[0]["label"] = {"A": 0, "B": "abc"}
+    # inhomogeneous numerics
+    batch[0]["label"] = [0, 1, 2]
+    batch[1]["label"] = [0, 1]
     labels = batch.get_field("label")
     assert isinstance(labels, list)
-    assert isinstance(labels[0], dict)
+    assert labels[0].size() == torch.Size((3,))
+    assert labels[1].size() == torch.Size((2,))
 
     # homogeneous numerics
     batch[0]["label"] = 0
-    batch[-1]["label"] = 1
+    batch[1]["label"] = 1
     labels = batch.get_field("label")
     torch.testing.assert_close(labels, torch.tensor([0, 1], dtype=torch.int64))
 
     batch[0]["label"] = 0.0
-    batch[-1]["label"] = 1.0
+    batch[1]["label"] = 1.0
     labels = batch.get_field("label")
     torch.testing.assert_close(labels, torch.tensor([0.0, 1.0], dtype=torch.float32))
 
@@ -87,31 +102,39 @@ def test_get_field():
     torch.testing.assert_close(labels, torch.tensor([0.0, 1.0], dtype=torch.int64))
 
     # channels
-    batch[0]["label"] = torch.ones(1, 3, 4, 5)
-    batch[1]["label"] = torch.ones(1, 3, 4, 5)
-    labels = batch.get_field("label", channels_last=True)
-    assert labels.stride() == (60, 1, 20, 5, 1)
-    labels = batch.get_field("label", channels_last=False)
-    assert labels.stride() == (60, 60, 20, 5, 1)
-
-    batch[0]["label"] = torch.ones(1, 3, 4)
-    batch[1]["label"] = torch.ones(1, 3, 4)
-    labels = batch.get_field("label", channels_last=True)
-    assert labels.stride() == (12, 1, 4, 1)
-    labels = batch.get_field("label", channels_last=False)
-    assert labels.stride() == (12, 12, 4, 1)
-
     batch[0]["label"] = 0
     batch[1]["label"] = 1
     labels = batch.get_field("label", ensure_channel_dim=True)
     torch.testing.assert_close(labels, torch.tensor([[0], [1]]))
 
+    # slices
+    batch = Batch(
+        [
+            Sample2D(
+                image=tio.ScalarImage(tensor=torch.randn(1, 3, 1, 5)),
+                label=tio.LabelMap(tensor=torch.ones(1, 3, 1, 5)),
+                participant=f"sub-{i}",
+                session=f"ses-{i}",
+                image_path="abc.nii.gz",
+                datatype=T1Linear(),
+                squeeze=False,
+                slice_direction=1,
+                sample_position=0,
+            )
+            for i in range(2)
+        ]
+    )
+    images = batch.get_field("image")
+    assert images.size() == (2, 1, 3, 1, 5)
+
+    batch[0].squeeze = batch[1].squeeze = True
+    images = batch.get_field("image")
+    assert images.size() == (2, 1, 3, 5)
+    labels = batch.get_field("label")
+    assert labels.size() == (2, 1, 3, 5)
+    assert batch[0].image.tensor.shape == (1, 3, 1, 5)
+
     # errors
-    with pytest.raises(
-        ValueError,
-        match=r"To use Channels Last memory format, the output tensor must be 4D \(BCHW\) or 5D \(BCDHW\). Here it is 1D.",
-    ):
-        batch.get_field("label", channels_last=True)
     with pytest.raises(
         KeyError,
         match="You want to get 'abc', but there is no such key in some DataPoints in the batch.",
@@ -121,71 +144,87 @@ def test_get_field():
 
 @pytest.mark.gpu
 def test_to():
+    # device
     batch = Batch(
         [
             DataPoint(
                 image=tio.ScalarImage(tensor=torch.randn(1, 3, 4, 5)),
-                label=torch.randn(2),
+                label=tio.LabelMap(tensor=torch.randn(1, 3, 3, 3)),
                 output=1,
-                abc=torch.randn(2, device=torch.device("cuda:0")),
+                abc=torch.randn(1, 3, 3, device=torch.device("cuda:0")),
                 participant=f"sub-{i}",
                 session=f"ses-{i}",
             )
             for i in range(2)
         ]
     )
+
+    assert not batch._non_blocking
+    assert batch.device is None
+    assert not batch.channels_last
+    assert batch[0].label.tensor.device == torch.device("cpu")
+    assert batch[0]["abc"].device == torch.device("cuda:0")
+    assert batch.get_field("output").device == torch.device("cpu")
+    assert batch.get_field("label").stride() == (27, 27, 9, 3, 1)
+    assert batch.get_field("abc").stride() == (9, 9, 3, 1)
+
     with pytest.raises(
         ValueError,
-        match="If 'device' is a str, it must be 'cuda' or 'cuda:<device-id>'.",
+        match="If 'device' is a str, it must be 'cpu', 'cuda' or 'cuda:<device-id>'.",
     ):
         batch.to("cuda-0", non_blocking=True)
     batch.to("cuda", non_blocking=True)
     batch.to(torch.device("cuda:0"), non_blocking=True)
 
-    batch_gpu = batch.to(0, non_blocking=True)
-    batch_cpu = batch.to("cpu")
-    assert batch_gpu._non_blocking
-    assert batch_gpu.device == torch.device("cuda:0")
-    assert not batch._non_blocking
-    assert batch.device is None
-    assert not batch_cpu._non_blocking
-    assert batch_cpu.device == torch.device("cpu")
+    batch.to(0, non_blocking=True, channels_last=True)
 
-    assert batch[0]["label"].device == torch.device("cpu")
-    assert batch_gpu[0]["label"].device == torch.device("cuda:0")
-
+    assert batch._non_blocking
+    assert batch.device == torch.device("cuda:0")
+    assert batch.channels_last
+    assert batch[0].label.tensor.device == torch.device("cpu")
     assert batch[0]["abc"].device == torch.device("cuda:0")
-    assert batch_gpu[0]["abc"].device == torch.device("cuda:0")
+    assert batch.get_field("output").device == torch.device("cuda:0")
+    assert batch.get_field("label").stride() == (27, 1, 9, 3, 1)
+    assert batch.get_field("abc").stride() == (9, 1, 3, 1)
 
+    batch.to("cpu")
+
+    assert not batch._non_blocking
+    assert batch.device == torch.device("cpu")
+    assert batch.channels_last
     assert batch.get_field("output").device == torch.device("cpu")
-    assert batch_gpu.get_field("output").device == torch.device("cuda:0")
+    assert batch.get_field("label").stride() == (27, 1, 9, 3, 1)
+    assert batch.get_field("abc").stride() == (9, 1, 3, 1)
+
+    batch.to(channels_last=False)
+    assert not batch.channels_last
+    assert batch.get_field("label").stride() == (27, 27, 9, 3, 1)
 
 
-def test_simple_collate_fn():
-    list_samples = [
-        DataPoint(
-            image=tio.ScalarImage(tensor=torch.randn(1, 3, 4, 5)),
-            label=tio.LabelMap(tensor=torch.ones(1, 3, 4, 5)),
-            participant=f"sub-{i}",
-            session=f"ses-{i}",
-        )
-        for i in range(2)
-    ]
-    out = simple_collate_fn(list_samples)
-    assert isinstance(out, Batch)
+def test_add_field():
+    batch = Batch(
+        [
+            DataPoint(
+                image=tio.ScalarImage(tensor=torch.randn(1, 3, 4, 5)),
+                label=None,
+                participant=f"sub-{i}",
+                session=f"ses-{i}",
+            )
+            for i in range(2)
+        ]
+    )
+    batch.add_field(torch.tensor([1, 2]), "abc")
+    torch.testing.assert_close(batch[0]["abc"], torch.tensor(1))
+    torch.testing.assert_close(batch[1]["abc"], torch.tensor(2))
+    with pytest.raises(
+        AssertionError,
+        match="'values' must have the same length as the batch. Got 3 values, whereas the batch has only 2 elements",
+    ):
+        batch.add_field("bcd", [1, 2, 3])
 
-
-def test_tuple_collate_fn():
-    list_samples = [
-        DataPoint(
-            image=tio.ScalarImage(tensor=torch.randn(1, 3, 4, 5)),
-            label=tio.LabelMap(tensor=torch.ones(1, 3, 4, 5)),
-            participant=f"sub-{i}",
-            session=f"ses-{i}",
-        )
-        for i in range(2)
-    ]
-    out = tuple_collate_fn(list(zip(list_samples, list_samples)))
-    assert isinstance(out, tuple)
-    assert len(out) == 2
-    assert isinstance(out[0], Batch)
+    batch.add_images(torch.randn(2, 1, 10, 10, 10), "new_image")
+    batch.add_masks(torch.randn(2, 1, 10, 10, 10), "new_mask")
+    assert isinstance(batch[0]["new_image"], tio.ScalarImage)
+    assert isinstance(batch[1]["new_image"], tio.ScalarImage)
+    assert isinstance(batch[0]["new_mask"], tio.LabelMap)
+    assert isinstance(batch[1]["new_mask"], tio.LabelMap)

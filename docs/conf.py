@@ -43,7 +43,7 @@ napoleon_use_admonition_for_references = True
 napoleon_use_admonition_for_notes = True
 napoleon_numpy_docstring = True
 
-napoleon_custom_sections = [("Returns", "params_style")]
+napoleon_custom_sections = [("Returns", "params_style"), ("Attributes", "params_style")]
 
 
 templates_path = ["_templates"]
@@ -96,7 +96,7 @@ language = "en"
 sphinx_gallery_conf = {
     "examples_dirs": "../examples",  # path to scripts
     "gallery_dirs": "auto_examples",  # path to where to save gallery generated output
-    "backreferences_dir": Path("api", "generated"),  # where mini-galleries are stored
+    "backreferences_dir": Path("generated"),  # where mini-galleries are stored
     "doc_module": (
         "clinicadl",
     ),  # generate mini-galleries for all the objects in clinicadl
