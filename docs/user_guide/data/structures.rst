@@ -6,15 +6,15 @@
 In neuroimaging, an image rarely travels alone: it comes with a participant and a
 session identifier, sometimes with one or several masks (for instance, marking specific anatomical regions),
 and with metadata such as the age of the participant or a
-diagnosis label. Storing all of these elements within one unified object helps prevent common errors —
-for instance applying a spatial transform to an image but forgetting to apply it to its mask.
+diagnosis label. Storing all of these elements within a single unified object helps prevent common errors,
+for instance applying a spatial transform to an image but not to its mask.
 
 This is the role of the :py:class:`~clinicadl.data.structures.DataPoint`, the
 central data structure of ClinicaDL, and of its child the
 :py:class:`~clinicadl.data.structures.Sample`.
 
-The DataPoint
--------------
+1.1.1. The DataPoint
+--------------------
 
 A :py:class:`~clinicadl.data.structures.DataPoint` gathers an image and any other
 relevant information associated with it. It is a subclass of
@@ -41,8 +41,9 @@ A ``DataPoint`` always has at least three fields:
     )
 
 You can pass the ``image`` either as a :py:class:`torchio.ScalarImage` or simply as
-a path to a NIfTI file. Any extra keyword argument is stored as an additional
-field.
+a path to a NIfTI file.
+
+Any extra keyword argument is stored as an additional field.
 
 Accessing fields
 ~~~~~~~~~~~~~~~~~
@@ -54,7 +55,7 @@ The three core fields are available as attributes:
     >>> datapoint.session
     'ses-M000'
 
-Any other field is accessed with the usual dictionary syntax, which you also use to
+Any other field is accessed with the usual dictionary syntax, which we also use to
 add or modify a field:
 
 .. code-block:: python
@@ -65,7 +66,7 @@ add or modify a field:
 
 Throughout this guide we use the bundled
 :py:class:`~clinicadl.data.structures.examples.Colin27DataPoint`, a ready-to-use
-``DataPoint`` wrapping the `Colin 27 average brain <https://www.bic.mni.mcgill.ca/ServicesAtlases/Colin27Highres>`.
+``DataPoint`` wrapping the `Colin 27 average brain <https://www.bic.mni.mcgill.ca/ServicesAtlases/Colin27Highres>`_.
 It contains a T1 image and a mask named ``"head"``, and requires no external data:
 
 .. code-block:: python
@@ -132,25 +133,26 @@ its images with :py:meth:`~clinicadl.data.structures.DataPoint.plot`.
 
 .. tip::
 
-    Because a ``DataPoint`` is a dictionary, you can store anything in it.
-    This is what makes it a convenient container to move data
-    through the whole ClinicaDL pipeline.
+    Because a ``DataPoint`` is a dictionary, you can store anything in it,
+    making it a convenient container to carry data
+    throughout the entire ClinicaDL pipeline.
 
-The Sample
-----------
+1.1.2. The Sample
+-----------------
 
 A :py:class:`~clinicadl.data.structures.Sample` is a ``DataPoint`` with a few extra
 fields. It is the **output of a** :py:class:`~clinicadl.data.datasets.Dataset` (see
-:doc:`Reading BIDS datasets <bids>`): when a dataset loads an image — or extracts a
-patch or a slice from it — it returns a ``Sample``.
+:doc:`Reading BIDS datasets <bids>` in the following subsection): when a dataset loads an image,
+or extracts a patch or a slice from it, it returns a ``Sample``.
+#TODO (est-ce que l'objet Sample vient aussi de torchio? Si oui, le préciser, comme pour DataPoint)
 
 In addition to the ``DataPoint`` fields, a ``Sample`` carries:
 
 - ``file_type``: the :py:class:`~clinicadl.io.bids.BidsFileType` describing the loaded file(s);
-- ``image_path``: the path(s) to the loaded image;
-- ``sample_type``: the kind of sample, among ``"image"``, ``"patch"`` and ``"slice"``;
-- ``sample_position``: the position of the sample in the original image (the index of
-  a slice, or the coordinates of a patch), or ``None`` for a whole image.
+- ``image_path``: the path(s) to the loaded image; #TODO (image or images?)
+- ``sample_type``: the sample type, among ``"image"``, ``"patch"`` and ``"slice"``;
+- ``sample_position``: the position of the sample in the original image, i.e. the index of
+  a slice, or the coordinates of a patch, or ``None`` for a whole image.
 
 A bundled :py:class:`~clinicadl.data.structures.examples.Colin27Sample` illustrates it:
 
@@ -164,8 +166,8 @@ A bundled :py:class:`~clinicadl.data.structures.examples.Colin27Sample` illustra
     >>> sample
     Colin27Sample(Keys: ('head', 'file_type', 'image_path', 'sample_type', 'sample_position', 'image', 'participant', 'session'); images: 2)
 
-The 2D Sample
--------------
+1.1.3. The 2D Sample
+--------------------
 
 When you work on 2D slices rather than 3D volumes, a dataset returns a
 :py:class:`~clinicadl.data.structures.Sample2D`, which is a ``Sample`` with two additional
@@ -189,7 +191,7 @@ fields:
     108
 
 Note how :py:meth:`~clinicadl.data.structures.Sample2D.get_image_tensor` returns a
-squeezed tensor when ``squeeze=True``.
+squeezed tensor when ``squeeze=True``. #TODO (à ajouter dans l'exemple)
 
 ----
 

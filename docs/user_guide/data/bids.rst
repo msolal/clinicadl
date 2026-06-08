@@ -15,8 +15,11 @@ involves three objects:
 - a :py:class:`~clinicadl.data.datasets.BidsDataset`, which ties the two together
   and loads the selected files into :py:class:`Samples <clinicadl.data.structures.Sample>`.
 
-Navigating a BIDS directory
----------------------------
+1.2.1. Title TBD #TODO
+----------------------
+
+Navigating a BIDS directory: Bids
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A :py:class:`~clinicadl.io.bids.Bids` is created from the path to a BIDS-like
 directory. The directory must contain the mandatory
@@ -31,17 +34,17 @@ ClinicaDL how the directory is organised.
     bids = Bids("bids")
 
 Most of the time you will not call the methods of ``Bids`` directly — the
-``BidsDataset`` does it for you. They are however useful for inspecting a dataset:
+``BidsDataset`` will do it for you. They are however useful for inspecting a dataset:
 :py:meth:`~clinicadl.io.bids.Bids.get_all_participants_sessions` lists every
 ``(participant, session)`` pair in the directory, while
 :py:meth:`~clinicadl.io.bids.Bids.get_path` and
 :py:meth:`~clinicadl.io.bids.Bids.has_file_type` locate a specific file.
 
-Describing the files to load
-----------------------------
+Describing the files to load: BidsFileType
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A :py:class:`~clinicadl.io.bids.BidsFileType` defines the files you are interested
-in. It is expressed in the vocabulary of the BIDS specification — a
+in. It is expressed in the vocabulary of the BIDS specification: a
 :bids:`suffix <common-principles.html#filenames>`, a
 :bids:`data type <common-principles.html#definitions>` (the folder, e.g.
 ``"anat"``), a file extension, and the :bids:`entities <common-principles.html#entities>`
@@ -62,9 +65,9 @@ For example, to select all the isotropic T1-weighted images registered to the MN
     )
 
 Clinica preprocessing pipelines
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+********************************
 
-If your data were preprocessed with :clinica:`Clinica <>`, you do not have to write
+If your data has been preprocessed with :clinica:`Clinica <>`, you do not have to write
 the file type by hand: ClinicaDL ships ready-made ``BidsFileType`` subclasses that
 match the output of the most common Clinica pipelines.
 
@@ -91,7 +94,8 @@ match the output of the most common Clinica pipelines.
     pet = PetLinear(tracer="18FFDG", suvr_reference_region="pons")
 
 The BidsDataset
----------------
+~~~~~~~~~~~~~~~~
+
 
 A :py:class:`~clinicadl.data.datasets.BidsDataset` is the object you will use most.
 It reads a BIDS directory, loads the files described by a ``BidsFileType``, and returns
@@ -142,15 +146,15 @@ file:
 
 A few arguments shape what a ``BidsDataset`` contains and will output:
 
-``data``
+- ``data``
     A :py:class:`pandas.DataFrame` (or a path to a TSV file) listing the
     ``(participant_id, session_id)`` pairs to keep, plus any extra columns. If
     omitted, **all** the pairs that have the requested ``file_type`` are used.
 
-``columns``
+- ``columns``
     The columns of ``data`` to carry into each ``Sample``. You can pass a list of
     column names, or a dictionary mapping a column name to a function applied to the
-    whole column — handy, for instance, to encode string labels as integers:
+    whole column, for instance, to encode string labels as integers:
 
     .. code-block:: python
 
@@ -171,9 +175,9 @@ A few arguments shape what a ``BidsDataset`` contains and will output:
         >>> dataset[0]["diagnosis"]
         0
 
-``masks``
+- ``masks``
     Masks to load alongside each image, passed as a dictionary. The keys become the
-    mask names in the ``Sample``; the values describe where to find each mask — a
+    mask names in the ``Sample`` and the values describe where to find each mask, a
     single shared NIfTI file or a :py:class:`~clinicadl.io.bids.BidsFileType` (for a
     subject- and session-specific mask in the same BIDS).
 
@@ -213,11 +217,13 @@ A few arguments shape what a ``BidsDataset`` contains and will output:
             },
         )
 
-``transforms``
+- ``transforms``
     A :py:class:`~clinicadl.transforms.TransformsHandler` describing the transforms
-    to apply and whether you work on entire images, patches or slices. This is the
-    subject of the :doc:`next section <transforms>`. For example, switching to
-    patches changes the number of samples in the dataset:
+    to apply and whether you work on entire images, patches or slices,
+    as we shall see in the :doc:`next section <transforms>`.
+    Note that switching to patches changes the number of samples in the dataset:
+    .. #TODO pas sûre que cette phrase ici soit utile, puisqu'il y a la
+    .. Note juste en-dessous
 
     .. code-block:: python
 
@@ -248,13 +254,15 @@ through :py:attr:`~clinicadl.data.datasets.Dataset.df`, and can be restricted to
 subset of ``(participant, session)`` pairs with
 :py:meth:`~clinicadl.data.datasets.Dataset.subset`.
 
+.. #TODO ajouter un paragraphe ici ou bien split en deux pages
+
 .. _user_guide_data_bids_tensors:
 
-1.2.1. Converting NIfTI images to tensors
------------------------------------------
+1.2.2. Converting NIfTI images to tensors
+------------------------------------------
 
 Opening a NIfTI file is comparatively slow. When you iterate over a dataset many
-times — which is exactly what is done during training phase — it pays off to convert your images to
+times, which is exactly what is done during training phase, it pays off to convert your images to
 PyTorch tensors once and read from the ``.pt`` files afterwards. This is what
 :py:meth:`BidsDataset.to_tensors <clinicadl.data.datasets.BidsDataset.to_tensors>`
 does:
@@ -271,11 +279,14 @@ does:
 The tensors are written to a :term:`BIDS derivative` named `"tensors"``, together with a ``.json``
 file describing the conversion. ``to_tensors`` returns a
 :py:class:`~clinicadl.data.datasets.TensorDataset` that you can use exactly like the
-original ``BidsDataset`` — only faster to load.
+original ``BidsDataset``, only faster to load.
+
+.. #TODO: ajouter un code-block pour montrer l'organisation des données une fois
+.. qu'elles sont converties en tensors
 
 You can also **save the transformed images** (``save_transforms=True``) so that the
 ``image_transforms`` of your :py:class:`~clinicadl.transforms.TransformsHandler` are
-applied once and for all during the conversion instead of on every load. Conversion
+applied only once during the conversion instead of on every load. Conversion
 can be parallelised with ``n_proc``.
 
 To reopen a previously converted dataset, point a
@@ -301,8 +312,8 @@ To reopen a previously converted dataset, point a
 1.2.2. Joining multiple datasets
 --------------------------------
 
-You may need to combine several datasets — images coming from different cohorts,
-or different modalities of the same participants. ClinicaDL offers three ways to do
+You may need to combine several datasets, for instance images coming from different cohorts,
+or different modalities for the same participants. ClinicaDL offers three ways to do
 so.
 
 Concatenating
@@ -311,6 +322,8 @@ Concatenating
 :py:class:`~clinicadl.data.datasets.ConcatDataset` concatenates datasets end to end. The
 length of the result is the sum of the lengths of its parts. Use it to gather images
 of the **same nature** coming from **different sources**.
+.. #TODO for instance to add images from different cohorts, i.e. with different
+.. participants or sessions.
 
 .. code-block:: python
 
@@ -335,6 +348,8 @@ Pairing
 **multimodal** data: each sample becomes a tuple holding the corresponding image from
 each dataset. All datasets must therefore contain exactly the same
 ``(participant, session)`` pairs and the same number of samples per image.
+.. #TODO spécifier s'il est possible d'avoir des missing modalities pour certains
+.. sujets. J'ai l'impression que non, mais ce serait cool de l'expliciter.
 
 .. code-block:: python
 
@@ -357,16 +372,17 @@ Stacking
 
 :py:class:`~clinicadl.data.datasets.UnpairedDataset` also returns a tuple of samples,
 but associates the datasets **randomly** rather than through a fixed mapping. The
-datasets need not share their ``(participant, session)`` pairs — this is useful, for
+datasets need not share their ``(participant, session)`` pairs, this is useful, for
 example, to feed a generative model with images that should *not* be paired. The
 random association can be re-drawn for each epoch with
 :py:meth:`~clinicadl.data.datasets.UnpairedDataset.set_epoch`, and the ``oversample``
 argument controls how datasets of different sizes are reconciled.
+.. #TODO et dans ce cas on peut avoir des missing modalities, right?
 
 1.2.3. Non-BIDS dataset?
 ------------------------
 
-If for some reasons, any of the previous dataset class is able to read your data,
+If for some reasons, any of the previous dataset class is unable to read your data,
 you can still write your own dataset by inheriting from :py:class:`clinicadl.data.datasets.Dataset`.
 
 ----
